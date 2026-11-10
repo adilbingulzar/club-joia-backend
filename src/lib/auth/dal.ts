@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { validateSessionToken, type SessionUser } from "@/services/auth.service";
 import type { Actor } from "@/services/context";
 import { can, homePathFor, type Permission } from "./permissions";
@@ -12,7 +13,14 @@ import { readSessionToken, requestMeta } from "./session";
  * Always call it inside a <Suspense> boundary (it reads cookies at request time).
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  return validateSessionToken(await readSessionToken());
+  const token = await readSessionToken();
+  // Everything behind a session is per-request data. The MySQL driver (mariadb) reads the clock
+  // synchronously when it hands out a pooled connection, which Next.js reports as sync I/O
+  // ("blocking-prerender-current-time") if it happens during a prerender stage. connection()
+  // moves the session lookup, and every query that follows it, to request time — the
+  // documented pattern for drivers that do synchronous work.
+  await connection();
+  return validateSessionToken(token);
 });
 
 export const getActor = cache(async (): Promise<Actor | null> => {

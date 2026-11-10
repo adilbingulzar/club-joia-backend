@@ -29,8 +29,11 @@ export async function clearSessionCookie() {
 export async function requestMeta(): Promise<RequestMeta> {
   const h = await headers();
   const forwarded = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+  // Header values are client-influenced; cap them so an oversized header can't overflow the
+  // VARCHAR ip_address columns (an IPv6 address is at most 45 characters).
+  const ip = (forwarded || h.get("x-real-ip") || "").slice(0, 64);
   return {
-    ipAddress: forwarded || h.get("x-real-ip") || null,
+    ipAddress: ip || null,
     userAgent: h.get("user-agent"),
   };
 }

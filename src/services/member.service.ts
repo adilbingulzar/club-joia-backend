@@ -147,11 +147,11 @@ export async function listMembers(actor: Actor, query: MemberListQuery = {}) {
     ...(q
       ? {
           OR: [
-            { firstName: { contains: q, mode: "insensitive" } },
-            { lastName: { contains: q, mode: "insensitive" } },
-            { membershipNumber: { contains: q, mode: "insensitive" } },
-            { user: { email: { contains: q, mode: "insensitive" } } },
-            { company: { contains: q, mode: "insensitive" } },
+            { firstName: { contains: q } },
+            { lastName: { contains: q } },
+            { membershipNumber: { contains: q } },
+            { user: { email: { contains: q } } },
+            { company: { contains: q } },
           ],
         }
       : {}),
@@ -221,8 +221,11 @@ export async function getMemberForStaff(actor: Actor, memberId: string) {
 }
 
 async function nextMembershipNumber(tx: Tx): Promise<string> {
-  const rows = await tx.$queryRaw<{ max: number | null }[]>`
-    SELECT MAX(CAST(SUBSTRING("membership_number" FROM 'CJ300-(\\d+)$') AS INTEGER)) AS max FROM "members"`;
+  // Numbers look like CJ300-0001; the digits start at character 7. Concurrent creators can read
+  // the same MAX — the unique index then rejects one and createMember retries.
+  const rows = await tx.$queryRaw<{ max: number | bigint | null }[]>`
+    SELECT MAX(CAST(SUBSTRING(\`membership_number\`, 7) AS UNSIGNED)) AS \`max\` FROM \`members\`
+    WHERE \`membership_number\` REGEXP '^CJ300-[0-9]+$'`;
   const next = (Number(rows[0]?.max ?? 0) || 0) + 1;
   return `CJ300-${String(next).padStart(4, "0")}`;
 }

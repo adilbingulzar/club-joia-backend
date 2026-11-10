@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
+import { deliveryChannelList } from "@/lib/json-list";
 import type { Prisma } from "@/generated/prisma/client";
 import type { DeliveryChannel, NotificationTargetType, NotificationType } from "@/generated/prisma/enums";
 import { recordAudit } from "./audit.service";
@@ -69,11 +70,12 @@ export async function dispatchNotification(notificationId: string) {
   if (claimed.count !== 1) return { dispatched: false as const };
 
   const n = await db.notification.findUniqueOrThrow({ where: { id: notificationId } });
+  const channels = deliveryChannelList(n.channels);
   try {
     const audience = await resolveAudience(n.targetType, n.targetId);
     const now = new Date();
 
-    if (n.channels.includes("IN_APP")) {
+    if (channels.includes("IN_APP")) {
       await db.notificationRecipient.createMany({
         data: audience.map((m) => ({
           notificationId: n.id,
@@ -86,7 +88,7 @@ export async function dispatchNotification(notificationId: string) {
       });
     }
 
-    for (const channel of n.channels.filter((c) => c !== "IN_APP")) {
+    for (const channel of channels.filter((c) => c !== "IN_APP")) {
       const adapter = CHANNEL_ADAPTERS[channel];
       const eligible = audience.filter((m) =>
         channel === "WEB_PUSH" ? (m.preferences as MemberPrefs)?.notifications?.push !== false : true,
@@ -249,6 +251,7 @@ export async function listNotificationsAdmin(actor: Actor, opts: { page?: number
     page,
     rows: rows.map((r) => ({
       ...r,
+      channels: deliveryChannelList(r.channels),
       stats: stats.filter((s) => s.notificationId === r.id),
       reads: reads.find((x) => x.notificationId === r.id)?._count ?? 0,
     })),

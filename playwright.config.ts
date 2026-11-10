@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * E2E runs against its own throwaway database and dev server on :3100 (see tests/e2e/server.mjs).
- * Requires the local PostgreSQL (`npm run db:start`) and TEST_DATABASE_URL.
+ * Uses the MySQL server and user from DATABASE_URL (see .env.example); never the database named there.
  */
 export default defineConfig({
   testDir: "tests/e2e",

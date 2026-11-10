@@ -254,10 +254,10 @@ export async function listRequestsStaff(actor: Actor, query: ConciergeQuery = {}
     ...(q
       ? {
           OR: [
-            { reference: { contains: q, mode: "insensitive" } },
-            { subject: { contains: q, mode: "insensitive" } },
-            { member: { lastName: { contains: q, mode: "insensitive" } } },
-            { member: { firstName: { contains: q, mode: "insensitive" } } },
+            { reference: { contains: q } },
+            { subject: { contains: q } },
+            { member: { lastName: { contains: q } } },
+            { member: { firstName: { contains: q } } },
           ],
         }
       : {}),

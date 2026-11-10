@@ -6,27 +6,37 @@ The private members' platform for CLUB JOIA 300, starting with the **Abu Dhabi G
 - **Check-in staff** (`/staff/scanner`): live camera QR scanning, a "Photo of QR" fallback that works on any phone camera, manual ticket lookup, check-in or deny.
 - **Admin portal** (`/admin`, staff sign-in at **`/admin/login`**): members, tiers and entitlements, events (create new events, uploaded hero images), programme and tickets per event, access logs, concierge (email / WhatsApp alerts to the responsible staff), notifications, staff, audit log and settings.
 
-Stack: Next.js 16 (App Router, Cache Components), React 19, TypeScript (strict), Tailwind CSS 4, PostgreSQL with Prisma 7, Vitest and Playwright.
+Stack: Next.js 16 (App Router, Cache Components), React 19, TypeScript (strict), Tailwind CSS 4, MySQL 8 with Prisma 7, Vitest and Playwright.
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Roadmap: [`docs/PHASE2.md`](docs/PHASE2.md), [`docs/PHASE3.md`](docs/PHASE3.md).
 
 ---
 
 ## Quick start (local development)
 
-Requirements: Node.js ≥ 20.19 and npm. **No Docker or system PostgreSQL is needed.** The `embedded-postgres` dev dependency runs real PostgreSQL binaries from `node_modules`.
+Requirements: Node.js ≥ 20.19, npm and **MySQL 8.0.13+** (MariaDB 10.6+ also works).
+
+One-time database setup (as the MySQL root user). The `joia_it_*` / `joia_e2e_*` grants let the tests create and drop their own throwaway databases:
+
+```sql
+CREATE DATABASE your_database CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'joia'@'localhost' IDENTIFIED BY 'Choose-a-Password-1';
+GRANT ALL PRIVILEGES ON your_database.* TO 'joia'@'localhost';
+GRANT ALL PRIVILEGES ON `joia\_it\_%`.*  TO 'joia'@'localhost';
+GRANT ALL PRIVILEGES ON `joia\_e2e\_%`.* TO 'joia'@'localhost';
+-- Needed only when binary logging is on (the MySQL 8 default) and the user is not SUPER:
+-- lets the migration create the audit-log triggers.
+SET PERSIST log_bin_trust_function_creators = 1;
+```
 
 ```bash
 npm install                  # also runs `prisma generate`
-cp .env.example .env         # then fill AUTH_SECRET, QR_SIGNING_SECRET, CRON_SECRET (see comments)
+cp .env.example .env         # then fill DATABASE_URL, AUTH_SECRET, QR_SIGNING_SECRET (see comments)
 npm run push:keys            # optional: paste the VAPID keys into .env for web push
 
-npm run db:start             # terminal 1 — local PostgreSQL on :54329 (data in .data/postgres)
 npm run db:deploy            # apply migrations
 npm run db:seed              # development seed data (see below)
-npm run dev                  # terminal 2 — http://localhost:3000
+npm run dev                  # http://localhost:3000
 ```
-
-To use your own PostgreSQL instead, point `DATABASE_URL` and `TEST_DATABASE_URL` at it and skip `db:start`.
 
 ### Development accounts (seed)
 
@@ -53,7 +63,7 @@ The seed creates the Abu Dhabi chapter, three tiers, the entitlement catalogue, 
 | `npm run dev` / `build` / `start` | Develop / production build / serve |
 | `npm run dev:lan` | Dev server over HTTPS on your network, so a phone can use the scanner camera (see below) |
 | `npm run lint` · `npm run typecheck` | ESLint · TypeScript (strict) |
-| `npm run db:migrate` | Create a migration after a schema change (dev) |
+| `npm run db:migration:new -- <name>` | Create a migration after a schema change: writes the SQL file only, never touches or resets the database. Tables the project does not manage are left out. |
 | `npm run db:deploy` | Apply migrations (CI / production) |
 | `npm run db:seed` | Development seed (idempotent) |
 | `npm test` | Unit and integration tests |
@@ -64,11 +74,11 @@ The seed creates the Abu Dhabi chapter, three tiers, the entitlement catalogue, 
 ### Tests
 
 - **Unit** (`tests/unit`): QR signing and verification, the access decision engine (every scan result), entitlement resolution, membership status rules, RBAC and concierge permissions, timezone maths.
-- **Integration** (`tests/integration`): real PostgreSQL, calling the service layer. Covers login and sessions, rate limiting, invitation → activation, ticket display, QR scanning, check-in, single entry, zone entitlements, revocation, credential reissue, membership suspension, concierge privacy, notifications and audit-log immutability.
+- **Integration** (`tests/integration`): real MySQL, calling the service layer. Covers login and sessions, rate limiting, invitation → activation, ticket display, QR scanning, check-in, single entry, zone entitlements, revocation, credential reissue, membership suspension, concierge privacy, notifications and audit-log immutability.
 - **E2E** (`tests/e2e`): member logs in, opens the ticket QR, views the programme, saves an item (red marker, persisted) and submits a concierge request. Staff **scan the real QR through a simulated camera** and check the member in, then decode it again via **Photo of QR** without camera access. The staff sign-in refuses member accounts. An admin creates a new event with an uploaded hero image, then revokes the ticket, and the same QR scans as **Revoked**.
 - Also covered: event creation and cloning, event-scoped ticket issuing, programme icons, concierge alert routing by category, assignment alerts, WhatsApp number validation.
 
-Integration and E2E runs each **create their own throwaway database** on the `TEST_DATABASE_URL` server, then migrate, seed and drop it afterwards. They never reset an existing database.
+Integration and E2E runs each **create their own throwaway database** (`joia_it_*` / `joia_e2e_*`) on the `DATABASE_URL` server, then migrate, seed and drop it afterwards. They never reset an existing database.
 
 ## PWA
 
@@ -111,31 +121,31 @@ A QR code contains only `CJ1.<payload>.<HMAC-SHA256>`. The payload is `{ r: cred
 
 ## Creating admin accounts
 
-- **First production super admin:** create the user with a one-off SQL insert or a script that sets `role = 'SUPER_ADMIN'`, `status = 'PENDING_ACTIVATION'`. Then generate an activation link from a trusted shell, or temporarily run the seed in a staging copy. The recommended path is to seed staging, then invite the real super admin from Admin → Staff and disable the seeded accounts.
+- **First production super admin:** on the server, run `npm run admin:create -- you@example.com "Your Name"`. It creates (or resets) an active super admin and prints a one-time random password. Then invite everyone else from the admin.
 - **Further staff:** Admin → Staff (super admin only). Choose a role, plus WhatsApp number, alert channels and concierge categories. You receive a one-time activation link to share securely while no email provider is configured. Staff sign in at `/admin/login`. Role changes and disabling sign the person out everywhere.
 - **Members:** Admin → Members → New member. This creates an invited membership and an activation link. Activation sets the password, records consent to the terms and privacy policy, and activates the membership.
 
 ## Deployment
 
-Host-agnostic: any Node.js 20+ host plus managed PostgreSQL.
+Any Linux server with Node.js 20.19+ (22 LTS recommended) and MySQL 8, with the app (`next start`) behind an HTTPS reverse proxy such as Nginx.
 
-1. Provision PostgreSQL. Set `DATABASE_URL`; use the pooled URL on serverless.
-2. Set every variable from `.env.example` in the host's secret store. Use `NEXT_PUBLIC_APP_URL=https://…`.
-3. Build: `npm ci && npm run build`. Release step: `npm run db:deploy`.
-4. Storage: set `STORAGE_DRIVER=s3` and the bucket variables. Local disk does not persist on serverless hosts.
-5. Configure the cron call for scheduled notifications.
-6. Security headers (CSP, HSTS on https, frame denial, Permissions-Policy allowing only the camera) are set in `next.config.ts`.
-7. Ensure the host sets `X-Forwarded-For` (Vercel and most proxies do). It is used for per-IP rate limits and audit IPs.
-8. Recommended: give the runtime a database role **without** owner rights, so it cannot drop the audit-log trigger.
+1. Set every variable from `.env.example` in the server's `.env`. Use `NEXT_PUBLIC_APP_URL=https://…` (also read at build time, so rebuild after changing it). Remove optional secrets you don't use instead of leaving them empty.
+2. Build and migrate: `npm ci --include=dev && npm run build && npm run db:deploy`, then restart the app. `--include=dev` matters when `NODE_ENV=production` is set, because the build needs dev dependencies.
+3. **Migration user and triggers:** the init migration creates the audit-log triggers. With binary logging on (the MySQL 8 default), MySQL only allows that for a user with SUPER, or after `SET PERSIST log_bin_trust_function_creators = 1;`. MySQL DDL is not transactional: if a migration fails part-way, fix the database, then run `npx prisma migrate resolve`.
+4. **No destructive Prisma commands:** `prisma.config.ts` refuses `migrate reset`, `migrate dev`, `db push` and `db execute`, whatever the database user, so the Prisma CLI cannot wipe or drop data. Application code is not affected. Migrations still run with `npm run db:deploy`, and the seed with `npm run db:seed`. MySQL triggers cannot block `TRUNCATE`, so in production the app's database user should not hold DROP.
+5. **Client IP:** the app takes the first `X-Forwarded-For` entry as the client IP (rate limits, audit log). The proxy must **overwrite** it, e.g. Nginx `proxy_set_header X-Forwarded-For $remote_addr;`, not `$proxy_add_x_forwarded_for`. Also set `client_max_body_size 12m;` for uploads.
+6. **Uploads:** with `STORAGE_DRIVER=local`, set `STORAGE_LOCAL_DIR` to an absolute path outside the app folder so deployments never remove it, and back it up with the database.
+7. **Scheduled notifications:** call `GET /api/cron/notifications` every minute with `Authorization: Bearer $CRON_SECRET`, e.g. `curl -fsS -H "Authorization: Bearer …" http://127.0.0.1:3000/api/cron/notifications`.
+8. First admin: `npm run admin:create -- you@example.com "Your Name"` (see above). Never run `npm run db:seed` in production.
 
-Vercel works out of the box. On other platforms use `next start` behind TLS.
+Security headers (CSP, HSTS on https, frame denial, Permissions-Policy allowing only the camera) are set in `next.config.ts`.
 
 ## Remaining production items
 
 These are **not done in V1** and need decisions or inputs before launch:
 
 - **Final domain** and `NEXT_PUBLIC_APP_URL` (HTTPS).
-- **Production database** (managed PostgreSQL, backups and point-in-time recovery) plus a non-owner runtime role.
+- **Production database:** MySQL 8 with backups, and a runtime user without DROP/ALTER/TRIGGER rights (see Deployment).
 - **Email provider:** SMTP and Resend drivers are built but not configured (needs an account, a verified sending domain and `SMTP_URL` / `RESEND_API_KEY`). Until then, activation and reset links are handed over manually from the admin UI and staff email alerts are only logged.
 - **WhatsApp:** the Twilio driver is built but not configured. It needs a Twilio account, a WhatsApp sender approved by Meta, and an approved message template (`TWILIO_WHATSAPP_CONTENT_SID`). Until then WhatsApp alerts are only logged.
 - **Real VAPID keys** and the `CRON_SECRET` scheduler.

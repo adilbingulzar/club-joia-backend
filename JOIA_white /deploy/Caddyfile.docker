@@ -1,8 +1,0 @@
-# Caddy config used by docker-compose.yml. Replace the domain with yours.
-test.your-domain.example {
-	encode zstd gzip
-	request_body {
-		max_size 12MB
-	}
-	reverse_proxy app:3000
-}

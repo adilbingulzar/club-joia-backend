@@ -6,8 +6,8 @@ Snapshot of the full project as of the date in the zip name. Installed packages 
 
 | Folder | What it is | Stack |
 |---|---|---|
-| `/` (root) | **Member app + admin + scanner**, the main application (dark theme) | Next.js 16, React 19, Tailwind 4, Prisma 7, PostgreSQL |
-| `JOIA_white /` | The **same application in a white theme**: a full, independent copy, with a release script for a self-contained Node server (`npm run release`) and server templates in `deploy/`. Note the trailing space in the folder name. | Same as above |
+| `/` (root) | **Member app + admin + scanner**, the main application (dark theme) | Next.js 16, React 19, Tailwind 4, Prisma 7, MySQL 8 |
+| `JOIA_white /` | The **same application in a white theme**: a full, independent copy, with a release script for a self-contained Node server (`npm run release`) and server templates in `deploy/`. Note the trailing space in the folder name. **Not yet migrated: still PostgreSQL.** | Next.js 16, React 19, Tailwind 4, Prisma 7, PostgreSQL |
 | `landing/` | **Pre-registration landing page** with an admin list and CSV export, made for GoDaddy cPanel hosting | PHP 8 + MySQL |
 | `carousel/` | Instagram-style **6-slide carousel**: images and videos in `footage/` | Static HTML/JS |
 
@@ -16,7 +16,8 @@ The two app folders share the same code except the theme (colours, logo variants
 ## Where to start
 
 - **Main app:** read `README.md`, then `docs/ARCHITECTURE.md`.
-  - Local setup: `npm install`, `npm run db:start` (embedded PostgreSQL, no Docker needed), `npm run db:migrate`, `npm run db:seed`, `npm run dev`.
+  - Local setup (needs a local MySQL 8, see README): `npm install`, `npm run db:deploy`, `npm run db:seed`, `npm run dev`.
+  - Production: see "Deployment" in `README.md`.
   - Tests: `npm test` (unit + integration) and `npm run test:e2e` (Playwright).
 - **White app:** the same steps inside `JOIA_white /`; it runs on port 3001. For deployment, see `JOIA_white /deploy/README-DEPLOY.md`.
 - **Landing page:** `landing/README.md`.
@@ -25,7 +26,7 @@ The two app folders share the same code except the theme (colours, logo variants
 ## Important notes
 
 - **Development passwords:** the seed creates demo accounts with publicly known development passwords. They're listed in `README.md`. Never seed a production database with them.
-- **Hosting:** the client's current hosting is GoDaddy cPanel shared hosting, which only runs PHP/MySQL. The landing page and carousel fit it; the Next.js apps need a Node.js host (e.g. Vercel, Railway, Render or a VPS) plus PostgreSQL.
+- **Hosting:** the client's current hosting is GoDaddy cPanel shared hosting, which only runs PHP/MySQL. The landing page and carousel fit it; the main Next.js app runs on a Laravel Forge server with MySQL (see "Deployment" in `README.md`).
 - **Open before launch:**
   - the email/WhatsApp providers;
   - legal texts;

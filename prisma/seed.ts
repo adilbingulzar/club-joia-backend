@@ -12,10 +12,10 @@
  */
 import "dotenv/config";
 import { hash } from "@node-rs/argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
 import type { EntryPolicy, ProgramCategory, ProgramVisibility, Role } from "../src/generated/prisma/enums";
 import { humanCode, randomToken } from "../src/lib/crypto";
+import { createMySqlAdapter } from "../src/lib/db-adapter";
 import { zonedToUtc } from "../src/lib/time";
 
 if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PRODUCTION !== "true") {
@@ -23,7 +23,7 @@ if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PRODUCTION !
   process.exit(1);
 }
 
-const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const db = new PrismaClient({ adapter: createMySqlAdapter(process.env.DATABASE_URL) });
 
 export const DEV_PASSWORDS = {
   member: "JoiaDev!2026-member", // LOCAL DEV ONLY
