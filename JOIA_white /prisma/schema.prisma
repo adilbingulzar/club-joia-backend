@@ -1,0 +1,921 @@
+// CLUB JOIA 300 — database schema (V1 / Phase 1)
+//
+// Conventions
+// - Tables are snake_case (@@map), fields camelCase in TypeScript, snake_case in SQL (@map).
+// - All primary keys are opaque CUIDs. Never expose them in QR codes.
+// - Human-facing references (membership numbers, ticket numbers) are separate unique columns.
+// - `metadata` JSON columns are for operational extras; anything queried or permission-relevant
+//   must be a real column.
+// - Phase 2 / Phase 3 tables are intentionally NOT created here — see docs/ARCHITECTURE.md.
+//   Dormant Phase 2 profile fields exist on `members` but are never exposed in V1.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity, authentication & sessions
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  MEMBER
+  CONCIERGE
+  CHECK_IN_STAFF
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  DISABLED
+}
+
+/// Login account. Every person who can sign in (member or staff) has exactly one user row.
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique /// always stored lower-cased
+  name              String /// display name for staff screens & audit trail
+  passwordHash      String?    @map("password_hash")
+  role              Role       @default(MEMBER)
+  status            UserStatus @default(PENDING_ACTIVATION)
+  emailVerifiedAt   DateTime?  @map("email_verified_at")
+  lastLoginAt       DateTime?  @map("last_login_at")
+  failedLoginCount  Int        @default(0) @map("failed_login_count")
+  lockedUntil       DateTime?  @map("locked_until")
+  passwordChangedAt DateTime?  @map("password_changed_at")
+
+  // MFA readiness (not enforced in V1 — see docs/ARCHITECTURE.md#mfa)
+  mfaEnabled         Boolean   @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted String?   @map("mfa_secret_encrypted")
+  mfaEnrolledAt      DateTime? @map("mfa_enrolled_at")
+
+  // Staff contact & operational alerts (concierge new-request / assignment alerts)
+  whatsappNumber      String?             @map("whatsapp_number") /// E.164, e.g. +971501234567
+  alertByEmail        Boolean             @default(true) @map("alert_by_email")
+  alertByWhatsapp     Boolean             @default(false) @map("alert_by_whatsapp")
+  conciergeCategories ConciergeCategory[] @default([]) @map("concierge_categories") /// request categories this person is responsible for
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  member               Member?
+  sessions             Session[]
+  authTokens           AuthToken[]
+  identities           AuthIdentity[]
+  pushSubscriptions    PushSubscription[]
+  consents             ConsentRecord[]
+  assignedConcierge    ConciergeRequest[]        @relation("ConciergeAssignee")
+  conciergeMessages    ConciergeRequestMessage[]
+  scanLogs             TicketScanLog[]
+  checkIns             TicketCheckIn[]
+  issuedTickets        Ticket[]                  @relation("TicketIssuer")
+  revokedTickets       Ticket[]                  @relation("TicketRevoker")
+  notificationsCreated Notification[]
+  auditLogs            AuditLog[]
+  files                StoredFile[]
+
+  @@index([role])
+  @@map("users")
+}
+
+/// Future external identities: Apple, Google, passkeys, magic-link. Unused in V1.
+model AuthIdentity {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  provider          String /// e.g. "apple", "google", "passkey"
+  providerAccountId String   @map("provider_account_id")
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+/// Server-side session. The cookie holds a random token; only its SHA-256 hash is stored.
+model Session {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique @map("token_hash")
+  userId      String    @map("user_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  mfaVerified Boolean   @default(false) @map("mfa_verified")
+  ipAddress   String?   @map("ip_address")
+  userAgent   String?   @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum AuthTokenType {
+  ACTIVATION
+  PASSWORD_RESET
+  MAGIC_LINK /// reserved for future
+  EMAIL_CHANGE /// reserved for future
+}
+
+/// Single-use, expiring tokens (activation, password reset). Only hashes are stored.
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String        @map("user_id")
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash")
+  expiresAt DateTime      @map("expires_at")
+  usedAt    DateTime?     @map("used_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("auth_tokens")
+}
+
+/// Fixed-window rate limit counters. DB-backed so limits hold across serverless instances.
+model RateLimitBucket {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime @map("window_start")
+
+  @@map("rate_limit_buckets")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Members & privacy
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Member {
+  id               String  @id @default(cuid())
+  userId           String  @unique @map("user_id")
+  membershipNumber String  @unique @map("membership_number") /// permanent club number, e.g. CJ300-0001
+  firstName        String  @map("first_name")
+  lastName         String  @map("last_name")
+  displayName      String? @map("display_name")
+  mobile           String?
+  country          String?
+  city             String?
+  nationality      String?
+  profilePhotoKey  String? @map("profile_photo_key") /// storage key, served via /api/files
+  company          String?
+  jobTitle         String? @map("job_title")
+  industry         String?
+  bio              String?
+
+  dietaryRequirements   String? @map("dietary_requirements")
+  allergies             String?
+  emergencyContactName  String? @map("emergency_contact_name")
+  emergencyContactPhone String? @map("emergency_contact_phone")
+  shirtSize             String? @map("shirt_size")
+
+  preferences     Json @default("{}") /// hospitality + notification preferences
+  privacySettings Json @default("{}") @map("privacy_settings")
+
+  // ── Phase 2 networking (dormant in V1; never rendered, never public by default) ──
+  networkingProfileEnabled Boolean  @default(false) @map("networking_profile_enabled")
+  networkingInterests      String[] @default([]) @map("networking_interests")
+  lookingToMeet            String[] @default([]) @map("looking_to_meet")
+  linkedinUrl              String?  @map("linkedin_url")
+  investmentInterests      String[] @default([]) @map("investment_interests")
+  socialLinks              Json     @default("{}") @map("social_links")
+  publicProfileFields      String[] @default([]) @map("public_profile_fields")
+
+  memberSince         DateTime  @default(now()) @map("member_since")
+  deletionRequestedAt DateTime? @map("deletion_requested_at")
+  anonymizedAt        DateTime? @map("anonymized_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  memberships            Membership[]
+  entitlementGrants      MemberEntitlement[]
+  tickets                Ticket[]
+  favorites              MemberProgramFavorite[]
+  conciergeRequests      ConciergeRequest[]
+  notificationRecipients NotificationRecipient[]
+  scanLogs               TicketScanLog[]
+
+  @@index([lastName, firstName])
+  @@map("members")
+}
+
+enum ConsentType {
+  TERMS
+  PRIVACY_POLICY
+  MARKETING
+  PUSH_NOTIFICATIONS
+  DATA_PROCESSING
+}
+
+/// Append-only consent history (GDPR accountability).
+model ConsentRecord {
+  id        String      @id @default(cuid())
+  userId    String      @map("user_id")
+  type      ConsentType
+  version   String
+  granted   Boolean
+  ipAddress String?     @map("ip_address")
+  userAgent String?     @map("user_agent")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("consent_records")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chapters, tiers, memberships & entitlements
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A city chapter of the club (Abu Dhabi now; Monaco, Miami, Singapore later).
+model Chapter {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  city      String
+  country   String
+  timezone  String
+  active    Boolean  @default(true)
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  events      Event[]
+  memberships Membership[]
+
+  @@map("chapters")
+}
+
+model MembershipTier {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  displayName String   @map("display_name")
+  description String?
+  color       String /// hex accent used in UI
+  cardTheme   String   @default("ruby") @map("card_theme") /// ruby | pearl | black — maps to card visual
+  sortOrder   Int      @default(0) @map("sort_order")
+  active      Boolean  @default(true)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships  Membership[]
+  entitlements TierEntitlement[]
+
+  @@map("membership_tiers")
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+}
+
+/// EVENT = V1 event-season membership. ANNUAL = Phase 3 global annual membership (dormant).
+enum MembershipKind {
+  EVENT
+  ANNUAL
+}
+
+model Membership {
+  id               String           @id @default(cuid())
+  memberId         String           @map("member_id")
+  tierId           String           @map("tier_id")
+  membershipNumber String           @unique @map("membership_number")
+  kind             MembershipKind   @default(EVENT)
+  status           MembershipStatus @default(INVITED)
+  startDate        DateTime?        @map("start_date") @db.Date
+  endDate          DateTime?        @map("end_date") @db.Date
+  issueDate        DateTime         @default(now()) @map("issue_date")
+  homeChapterId    String?          @map("home_chapter_id")
+  metadata         Json             @default("{}")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  member      Member         @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  tier        MembershipTier @relation(fields: [tierId], references: [id], onDelete: Restrict)
+  homeChapter Chapter?       @relation(fields: [homeChapterId], references: [id], onDelete: SetNull)
+
+  @@index([memberId, status])
+  @@index([tierId, status])
+  @@map("memberships")
+}
+
+enum EntitlementValueType {
+  BOOLEAN
+  INTEGER
+  TEXT
+}
+
+/// Catalogue of privileges. Tiers grant entitlements; UI never hardcodes privileges.
+model Entitlement {
+  id          String               @id @default(cuid())
+  code        String               @unique /// e.g. vip_deck_access
+  name        String
+  description String?
+  category    String /// ACCESS | HOSPITALITY | SERVICE | GUEST
+  valueType   EntitlementValueType @default(BOOLEAN) @map("value_type")
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  tiers        TierEntitlement[]
+  memberGrants MemberEntitlement[]
+
+  @@map("entitlements")
+}
+
+model TierEntitlement {
+  tierId        String @map("tier_id")
+  entitlementId String @map("entitlement_id")
+  value         Json /// true | number | string, per entitlement.valueType
+  metadata      Json   @default("{}")
+
+  tier        MembershipTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  entitlement Entitlement    @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@id([tierId, entitlementId])
+  @@map("tier_entitlements")
+}
+
+/// Per-member override (grant or revoke) on top of the tier's entitlements.
+model MemberEntitlement {
+  id            String    @id @default(cuid())
+  memberId      String    @map("member_id")
+  entitlementId String    @map("entitlement_id")
+  value         Json /// false revokes a tier-granted boolean entitlement
+  reason        String?
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  member      Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  entitlement Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, entitlementId])
+  @@map("member_entitlements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Events, access zones & programme
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  LIVE
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  slug        String      @unique
+  chapterId   String?     @map("chapter_id")
+  name        String
+  city        String
+  country     String
+  venue       String
+  timezone    String /// IANA, e.g. Asia/Dubai. Programme times are local to this zone.
+  startDate   DateTime    @map("start_date") @db.Date
+  endDate     DateTime    @map("end_date") @db.Date
+  status      EventStatus @default(DRAFT)
+  heroImage   String?     @map("hero_image") /// storage key of an uploaded image (served via /api/files)
+  description String?
+  metadata    Json        @default("{}") /// supportEmail, supportPhone, infoSections[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  chapter           Chapter?           @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  zones             AccessZone[]
+  programItems      EventProgramItem[]
+  ticketTypes       TicketType[]
+  tickets           Ticket[]
+  conciergeRequests ConciergeRequest[]
+  notifications     Notification[]
+  scanLogs          TicketScanLog[]
+
+  @@index([status, startDate])
+  @@map("events")
+}
+
+/// A physical checkpoint / area of an event (main hospitality, VIP deck, parking...).
+model AccessZone {
+  id                      String   @id @default(cuid())
+  eventId                 String   @map("event_id")
+  code                    String
+  name                    String
+  description             String?
+  requiredEntitlementCode String?  @map("required_entitlement_code") /// membership-level gate on top of ticket
+  active                  Boolean  @default(true)
+  sortOrder               Int      @default(0) @map("sort_order")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ticketTypes TicketTypeZone[]
+  checkIns    TicketCheckIn[]
+  scanLogs    TicketScanLog[]
+
+  @@unique([eventId, code])
+  @@map("access_zones")
+}
+
+enum ProgramCategory {
+  ARRIVAL
+  HOSPITALITY
+  RACING
+  FOOD
+  ENTERTAINMENT
+  NETWORKING
+  CONCIERGE
+  AFTER_PARTY
+  OTHER
+}
+
+enum ProgramVisibility {
+  DRAFT /// not shown to members
+  MEMBERS /// all members with access to the event
+  RESTRICTED /// only members holding `requiredEntitlementCode`
+}
+
+model EventProgramItem {
+  id                      String            @id @default(cuid())
+  eventId                 String            @map("event_id")
+  date                    DateTime          @db.Date /// local event date
+  startTime               String            @map("start_time") /// "HH:mm", local to event timezone
+  endTime                 String?           @map("end_time")
+  title                   String
+  subtitle                String?
+  description             String?
+  location                String?
+  category                ProgramCategory   @default(OTHER)
+  icon                    String? /// key from src/domain/programme-icons.ts; null = chosen automatically
+  image                   String? /// storage key of an uploaded image (served via /api/files)
+  visibility              ProgramVisibility @default(DRAFT)
+  requiredEntitlementCode String?           @map("required_entitlement_code")
+  sortOrder               Int               @default(0) @map("sort_order")
+  capacity                Int?
+  isSample                Boolean           @default(false) @map("is_sample") /// seeded sample content, editable
+  metadata                Json              @default("{}")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+
+  event     Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  favorites MemberProgramFavorite[]
+
+  @@index([eventId, date, sortOrder])
+  @@map("event_program_items")
+}
+
+/// Saved programme items — the seed of the Phase 2 personal calendar.
+model MemberProgramFavorite {
+  memberId      String   @map("member_id")
+  programItemId String   @map("program_item_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  member      Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  programItem EventProgramItem @relation(fields: [programItemId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, programItemId])
+  @@map("member_program_favorites")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tickets, credentials & access control
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EntryPolicy {
+  SINGLE_ENTRY /// one check-in per zone, ever
+  DAILY_ENTRY /// one check-in per zone per event-local day
+  MULTI_ENTRY /// unlimited re-entry inside the validity window
+}
+
+model TicketType {
+  id          String      @id @default(cuid())
+  eventId     String      @map("event_id")
+  code        String
+  name        String
+  description String?
+  validFrom   DateTime    @map("valid_from")
+  validUntil  DateTime    @map("valid_until")
+  entryPolicy EntryPolicy @default(MULTI_ENTRY) @map("entry_policy")
+  active      Boolean     @default(true)
+  sortOrder   Int         @default(0) @map("sort_order")
+  metadata    Json        @default("{}")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  event   Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zones   TicketTypeZone[]
+  tickets Ticket[]
+
+  @@unique([eventId, code])
+  @@map("ticket_types")
+}
+
+model TicketTypeZone {
+  ticketTypeId String @map("ticket_type_id")
+  zoneId       String @map("zone_id")
+
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  zone       AccessZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@id([ticketTypeId, zoneId])
+  @@map("ticket_type_zones")
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  REVOKED
+  EXPIRED
+  SUSPENDED
+}
+
+model Ticket {
+  id           String       @id @default(cuid())
+  eventId      String       @map("event_id")
+  ticketTypeId String       @map("ticket_type_id")
+  memberId     String       @map("member_id")
+  ticketNumber String       @unique @map("ticket_number") /// human-readable, used for manual lookup
+  status       TicketStatus @default(ACTIVE)
+  validFrom    DateTime     @map("valid_from")
+  validUntil   DateTime     @map("valid_until")
+  issuedAt     DateTime     @default(now()) @map("issued_at")
+  issuedById   String?      @map("issued_by_id")
+  revokedAt    DateTime?    @map("revoked_at")
+  revokedById  String?      @map("revoked_by_id")
+  revokeReason String?      @map("revoke_reason")
+  metadata     Json         @default("{}")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  ticketType  TicketType         @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  member      Member             @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  issuedBy    User?              @relation("TicketIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  revokedBy   User?              @relation("TicketRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  credentials TicketCredential[]
+  checkIns    TicketCheckIn[]
+  scanLogs    TicketScanLog[]
+
+  @@index([memberId, eventId])
+  @@index([eventId, status])
+  @@map("tickets")
+}
+
+/// Revocation anchor for QR codes. The QR carries `credentialRef` (random, opaque) inside a
+/// signed, short-lived token. Re-issuing a credential revokes the previous one.
+model TicketCredential {
+  id            String    @id @default(cuid())
+  ticketId      String    @map("ticket_id")
+  credentialRef String    @unique @map("credential_ref")
+  version       Int
+  issuedAt      DateTime  @default(now()) @map("issued_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokeReason  String?   @map("revoke_reason")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, version])
+  @@map("ticket_credentials")
+}
+
+/// Successful admissions. `entryKey` lets the database itself refuse duplicate admissions
+/// (e.g. "once" for SINGLE_ENTRY, the local date for DAILY_ENTRY, a random value for MULTI_ENTRY).
+model TicketCheckIn {
+  id          String   @id @default(cuid())
+  ticketId    String   @map("ticket_id")
+  zoneId      String   @map("zone_id")
+  staffUserId String   @map("staff_user_id")
+  entryKey    String   @map("entry_key")
+  localDate   String   @map("local_date") /// YYYY-MM-DD in event timezone
+  checkedInAt DateTime @default(now()) @map("checked_in_at")
+
+  ticket Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  zone   AccessZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  staff  User       @relation(fields: [staffUserId], references: [id], onDelete: Restrict)
+
+  @@unique([ticketId, zoneId, entryKey])
+  @@index([checkedInAt])
+  @@map("ticket_check_ins")
+}
+
+enum ScanAction {
+  VALIDATE
+  CHECK_IN
+  DENY
+}
+
+enum ScanMethod {
+  QR
+  MANUAL
+}
+
+enum ScanResult {
+  VALID
+  ALREADY_USED
+  NOT_VALID_YET
+  EXPIRED
+  REVOKED
+  INVALID
+  WRONG_ACCESS_ZONE
+  SUSPENDED
+}
+
+/// Every scan attempt, including invalid/forged codes (ticket/member null when unresolvable).
+model TicketScanLog {
+  id          String     @id @default(cuid())
+  ticketId    String?    @map("ticket_id")
+  memberId    String?    @map("member_id")
+  eventId     String?    @map("event_id")
+  zoneId      String?    @map("zone_id")
+  staffUserId String     @map("staff_user_id")
+  scanTime    DateTime   @default(now()) @map("scan_time")
+  action      ScanAction
+  method      ScanMethod
+  result      ScanResult
+  reason      String?
+  deviceInfo  String?    @map("device_info")
+  location    String?
+  metadata    Json       @default("{}")
+
+  ticket Ticket?     @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  member Member?     @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  event  Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  zone   AccessZone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  staff  User        @relation(fields: [staffUserId], references: [id], onDelete: Restrict)
+
+  @@index([scanTime])
+  @@index([ticketId])
+  @@map("ticket_scan_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Concierge
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ConciergeCategory {
+  TRANSPORT
+  DINING
+  HOTEL
+  YACHT
+  NIGHTLIFE
+  TICKET_SUPPORT
+  SPECIAL_REQUEST
+  OTHER
+}
+
+enum ConciergeStatus {
+  NEW
+  IN_PROGRESS
+  WAITING_FOR_MEMBER
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ConciergePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// Who/what created something in the concierge service — AI_AGENT is reserved for Phase 3.
+enum ActorType {
+  MEMBER
+  STAFF
+  SYSTEM
+  AI_AGENT
+}
+
+model ConciergeRequest {
+  id             String            @id @default(cuid())
+  reference      String            @unique /// human reference, e.g. JC-7K3M9Q
+  memberId       String            @map("member_id")
+  eventId        String?           @map("event_id")
+  category       ConciergeCategory
+  subject        String
+  description    String
+  status         ConciergeStatus   @default(NEW)
+  priority       ConciergePriority @default(NORMAL)
+  assignedToId   String?           @map("assigned_to_id")
+  preferredDate  DateTime?         @map("preferred_date") @db.Date
+  preferredTime  String?           @map("preferred_time")
+  numberOfPeople Int?              @map("number_of_people")
+  notes          String?
+  source         ActorType         @default(MEMBER)
+  closedAt       DateTime?         @map("closed_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  member     Member                    @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  event      Event?                    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  assignedTo User?                     @relation("ConciergeAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages   ConciergeRequestMessage[]
+
+  @@index([status, createdAt])
+  @@index([memberId, createdAt])
+  @@map("concierge_requests")
+}
+
+model ConciergeRequestMessage {
+  id             String    @id @default(cuid())
+  requestId      String    @map("request_id")
+  senderId       String?   @map("sender_id") /// null for SYSTEM messages
+  senderType     ActorType @map("sender_type")
+  message        String
+  internalNote   Boolean   @default(false) @map("internal_note") /// never visible to members
+  attachmentKey  String?   @map("attachment_key")
+  attachmentName String?   @map("attachment_name")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  request ConciergeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sender  User?            @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+  @@map("concierge_request_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  ANNOUNCEMENT
+  PROGRAMME
+  TICKET
+  CONCIERGE
+  TRANSPORT
+  MEMBERSHIP
+  SYSTEM
+}
+
+enum NotificationTargetType {
+  ALL_MEMBERS
+  TIER
+  EVENT
+  MEMBER
+}
+
+enum NotificationStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryChannel {
+  IN_APP
+  WEB_PUSH
+  EMAIL /// future
+  SMS /// future
+  WHATSAPP /// future
+  APPLE_PUSH /// future native app
+  ANDROID_PUSH /// future native app
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model Notification {
+  id          String                 @id @default(cuid())
+  title       String
+  body        String
+  type        NotificationType       @default(ANNOUNCEMENT)
+  targetType  NotificationTargetType @map("target_type")
+  targetId    String?                @map("target_id") /// tier id / event id / member id
+  eventId     String?                @map("event_id")
+  url         String? /// in-app deep link (relative path)
+  channels    DeliveryChannel[]      @default([IN_APP, WEB_PUSH])
+  scheduledAt DateTime?              @map("scheduled_at")
+  sentAt      DateTime?              @map("sent_at")
+  status      NotificationStatus     @default(DRAFT)
+  createdById String?                @map("created_by_id") /// null = system-generated
+  metadata    Json                   @default("{}")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+
+  event      Event?                  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdBy  User?                   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  recipients NotificationRecipient[]
+
+  @@index([status, scheduledAt])
+  @@map("notifications")
+}
+
+model NotificationRecipient {
+  id              String          @id @default(cuid())
+  notificationId  String          @map("notification_id")
+  memberId        String          @map("member_id")
+  deliveryChannel DeliveryChannel @map("delivery_channel")
+  deliveryStatus  DeliveryStatus  @default(PENDING) @map("delivery_status")
+  error           String?
+  sentAt          DateTime?       @map("sent_at")
+  readAt          DateTime?       @map("read_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  member       Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, memberId, deliveryChannel])
+  @@index([memberId, deliveryChannel, readAt])
+  @@map("notification_recipients")
+}
+
+model PushSubscription {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  endpoint     String    @unique
+  p256dh       String
+  auth         String
+  userAgent    String?   @map("user_agent")
+  failureCount Int       @default(0) @map("failure_count")
+  disabledAt   DateTime? @map("disabled_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastUsedAt   DateTime? @map("last_used_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Files, settings & audit
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum FilePurpose {
+  PROFILE_PHOTO
+  CONCIERGE_ATTACHMENT
+  EVENT_IMAGE
+  PROGRAMME_IMAGE
+}
+
+/// Registry of uploaded objects. Files are only ever served through an authorized route.
+model StoredFile {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  ownerUserId String?     @map("owner_user_id")
+  purpose     FilePurpose
+  contentType String      @map("content_type")
+  size        Int
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  owner User? @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+
+  @@map("stored_files")
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+/// Append-only. UPDATE and DELETE are blocked by a database trigger (see migration).
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?  @map("actor_user_id")
+  action      String /// e.g. ticket.revoke
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  beforeData  Json?    @map("before_data")
+  afterData   Json?    @map("after_data")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

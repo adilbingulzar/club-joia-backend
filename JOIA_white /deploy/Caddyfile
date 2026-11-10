@@ -1,0 +1,9 @@
+# Caddy reverse proxy with automatic HTTPS (free Let's Encrypt certificate).
+# Replace the domain with yours; its DNS A record must point at this server, ports 80 and 443 open.
+test.your-domain.example {
+	encode zstd gzip
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy 127.0.0.1:3000
+}

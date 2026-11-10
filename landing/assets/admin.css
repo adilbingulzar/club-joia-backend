@@ -1,0 +1,27 @@
+@import url(fonts.css);
+:root { --ink: #050505; --pearl: #f5f3ee; --muted: #8f8b82; --line: rgba(245, 243, 238, 0.12); --ruby: #ef233c; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ink); color: var(--pearl); font: 14px/1.5 "Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif; }
+.bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--line); }
+.bar img { height: auto; display: block; }
+main { padding: 32px 24px; max-width: 1400px; margin: 0 auto; }
+h1 { font: 400 40px/1.1 "Cormorant Garamond", Georgia, serif; margin: 0 0 6px; }
+.muted { color: var(--muted); margin: 0; }
+button, .button { background: var(--pearl); color: var(--ink); border: 0; border-radius: 999px; padding: 10px 20px; font: 600 12px/1 inherit; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; text-decoration: none; display: inline-block; }
+.bar button { background: transparent; color: var(--pearl); border: 1px solid var(--line); }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.login { max-width: 360px; margin: 10vh auto; display: grid; gap: 10px; }
+.login label { color: var(--muted); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin-top: 12px; }
+.login input { background: transparent; color: var(--pearl); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font: inherit; }
+.login input:focus { outline: 2px solid var(--ruby); outline-offset: 1px; }
+.login button { margin-top: 12px; padding: 14px; }
+.error { color: #ff6b7d; margin: 0; }
+.empty { color: var(--muted); padding: 48px 0; }
+.table { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 1000px; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+tr:last-child td { border-bottom: 0; }
+td a { color: var(--pearl); }
+.nowrap { white-space: nowrap; }
+.msg { max-width: 280px; color: #cfcac0; }

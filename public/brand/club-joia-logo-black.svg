@@ -1,0 +1,12 @@
+<!--
+  PLACEHOLDER WORDMARK — not the official CLUB JOIA 300 logo.
+  Replace this file with the supplied brand asset of the same name (club-joia-logo-black.svg).
+  The app references it only via <JoiaLogo />, so no code changes are needed.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 72" role="img" aria-label="CLUB JOIA 300">
+  <g fill="#050505">
+    <text x="0" y="22" font-family="Helvetica Neue, Arial, sans-serif" font-size="13" letter-spacing="7" font-weight="500">CLUB</text>
+    <text x="0" y="66" font-family="Didot, Bodoni 72, Georgia, serif" font-size="46" letter-spacing="6" font-weight="400">JOIA</text>
+    <text x="170" y="66" font-family="Didot, Bodoni 72, Georgia, serif" font-size="46" letter-spacing="2" font-style="italic" font-weight="400">300</text>
+  </g>
+</svg>

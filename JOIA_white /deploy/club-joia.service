@@ -1,0 +1,17 @@
+# systemd unit: keeps the app running and restarts it after crashes / reboots.
+# Install:  sudo cp club-joia.service /etc/systemd/system/ && sudo systemctl enable --now club-joia
+# Adjust User and WorkingDirectory to where you unpacked the release.
+[Unit]
+Description=CLUB JOIA 300 (white edition)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=joia
+WorkingDirectory=/opt/club-joia
+ExecStart=/bin/sh /opt/club-joia/start.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
