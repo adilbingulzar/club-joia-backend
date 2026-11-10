@@ -4,8 +4,13 @@ import { AppError } from "@/lib/errors";
 import { sha256 } from "@/lib/crypto";
 
 /**
- * Fixed-window rate limiter backed by PostgreSQL (one atomic upsert per hit), so limits are
- * shared across all serverless instances. Keys are hashed so no emails/IPs are stored raw.
+ * Fixed-window rate limiter backed by MySQL, so limits are shared by every app process.
+ * Keys are hashed so no emails/IPs are stored raw.
+ *
+ * One atomic upsert per hit. MySQL has no `RETURNING`, so the upsert and the read-back run in one
+ * transaction: the upsert keeps the row locked until commit, so concurrent hits on the same key
+ * queue up and each reads its own count. In ON DUPLICATE KEY UPDATE, assignments apply left to
+ * right, so `count` is computed from the old `window_start` before that column is reset.
  */
 export async function hitRateLimit(
   key: string,
@@ -13,15 +18,15 @@ export async function hitRateLimit(
   windowSeconds: number,
 ): Promise<{ allowed: boolean; remaining: number }> {
   const hashed = sha256(key);
-  const rows = await db.$queryRaw<{ count: number }[]>`
-    INSERT INTO "rate_limit_buckets" ("key", "count", "window_start")
-    VALUES (${hashed}, 1, now())
-    ON CONFLICT ("key") DO UPDATE SET
-      "count" = CASE WHEN "rate_limit_buckets"."window_start" < now() - make_interval(secs => ${windowSeconds})
-                     THEN 1 ELSE "rate_limit_buckets"."count" + 1 END,
-      "window_start" = CASE WHEN "rate_limit_buckets"."window_start" < now() - make_interval(secs => ${windowSeconds})
-                     THEN now() ELSE "rate_limit_buckets"."window_start" END
-    RETURNING "count"`;
+  const [, rows] = await db.$transaction([
+    db.$executeRaw`
+      INSERT INTO \`rate_limit_buckets\` (\`key\`, \`count\`, \`window_start\`)
+      VALUES (${hashed}, 1, UTC_TIMESTAMP(3))
+      ON DUPLICATE KEY UPDATE
+        \`count\` = IF(\`window_start\` < UTC_TIMESTAMP(3) - INTERVAL ${windowSeconds} SECOND, 1, \`count\` + 1),
+        \`window_start\` = IF(\`window_start\` < UTC_TIMESTAMP(3) - INTERVAL ${windowSeconds} SECOND, UTC_TIMESTAMP(3), \`window_start\`)`,
+    db.$queryRaw<{ count: number | bigint }[]>`SELECT \`count\` FROM \`rate_limit_buckets\` WHERE \`key\` = ${hashed}`,
+  ]);
   const count = Number(rows[0]?.count ?? limit + 1);
   return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
 }

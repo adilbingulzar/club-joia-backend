@@ -2,7 +2,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium, devices, expect, test, type Page } from "@playwright/test";
 import QRCode from "qrcode";
-import pg from "pg";
+import { connectDatabase } from "../support/mysql-admin.mjs";
 
 /**
  * End-to-end flows from the V1 spec:
@@ -60,13 +60,12 @@ async function scannerPage() {
 }
 
 test.beforeAll(async () => {
-  const db = new pg.Client({ connectionString: readFileSync(".data/e2e-db-url", "utf8").trim() });
-  await db.connect();
-  const r = await db.query(
+  const db = await connectDatabase(readFileSync(".data/e2e-db-url", "utf8").trim());
+  const rows = await db.query(
     `SELECT t.ticket_number FROM tickets t JOIN members m ON m.id = t.member_id JOIN ticket_types tt ON tt.id = t.ticket_type_id
      WHERE m.first_name = 'Alex' AND tt.code = 'FRI'`,
   );
-  ticketNumber = r.rows[0].ticket_number;
+  ticketNumber = rows[0].ticket_number;
   await db.end();
 });
 

@@ -1,15 +1,12 @@
 import "server-only";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import { createMySqlAdapter } from "@/lib/db-adapter";
 
 /** One PrismaClient (and pool) per server process; survives dev hot-reloads. */
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL is not set");
-  const adapter = new PrismaPg({ connectionString });
-  return new PrismaClient({ adapter });
+  return new PrismaClient({ adapter: createMySqlAdapter(process.env.DATABASE_URL) });
 }
 
 export const db: PrismaClient = globalForPrisma.prisma ?? createClient();

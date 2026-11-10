@@ -13,24 +13,7 @@ apart from **Node.js** and **PostgreSQL**.
 | HTTPS | Required. Sign-in cookies are marked *Secure*, so sign-in does not work over plain `http://`. The phone camera scanner also needs HTTPS. The Caddy setup below gets a free certificate automatically. |
 | Domain | A (sub)domain pointing at the server, e.g. `test.your-domain.example` |
 
-There are two ways to install: **A. Docker** (everything in one command) or **B. directly on the server**.
-
----
-
-## A. With Docker (simplest)
-
-```bash
-unzip club-joia-300-white-*.zip && cd club-joia-300-white
-cp .env.example .env
-nano .env            # fill in NEXT_PUBLIC_APP_URL, AUTH_SECRET, QR_SIGNING_SECRET, POSTGRES_PASSWORD
-nano Caddyfile.docker  # put your domain on the first line
-docker compose up -d --build
-```
-
-Then continue with **First sign-in** below. Run the tools inside the container:
-`docker compose exec app node tools/create-admin.mjs you@example.com "Your Name"`.
-
-## B. Directly on the server
+## Install on the server
 
 ```bash
 # 1. Unpack (example location /opt/club-joia)
@@ -80,13 +63,12 @@ Pick **one** of these:
 2. Copy the new release over the old folder. **Keep `.env` and the `data/` folder** (uploaded images).
 3. `node tools/migrate.mjs`, then start it again.
 
-With Docker: replace the files, then `docker compose up -d --build`. The data stays in Docker volumes.
 
 ## Good to know
 
 - **Emails and WhatsApp** are only written to the server log until `EMAIL_DRIVER` /
   `WHATSAPP_DRIVER` are configured in `.env`. Until then, the admin shows one-time activation
   links to copy by hand.
-- **Logs:** `journalctl -u club-joia -f` (systemd) or `docker compose logs -f app`.
+- **Logs:** `journalctl -u club-joia -f` (systemd).
 - **Backups:** back up the PostgreSQL database and the `data/uploads` folder.
 - **Port:** the app listens on `127.0.0.1:3000` (set `PORT` / `BIND_ADDRESS` in `.env`).

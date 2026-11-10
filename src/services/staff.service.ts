@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { conciergeCategoryList } from "@/lib/json-list";
 import { AppError, notFound } from "@/lib/errors";
 import { STAFF_ROLES } from "@/lib/auth/permissions";
 import type { ConciergeCategory, Role } from "@/generated/prisma/enums";
@@ -11,7 +12,7 @@ import { requirePermission, type Actor } from "./context";
 
 export async function listStaff(actor: Actor) {
   requirePermission(actor, "staff:manage");
-  return db.user.findMany({
+  const rows = await db.user.findMany({
     where: { role: { in: STAFF_ROLES } },
     orderBy: [{ role: "asc" }, { name: "asc" }],
     select: {
@@ -19,6 +20,7 @@ export async function listStaff(actor: Actor) {
       whatsappNumber: true, alertByEmail: true, alertByWhatsapp: true, conciergeCategories: true,
     },
   });
+  return rows.map((r) => ({ ...r, conciergeCategories: conciergeCategoryList(r.conciergeCategories) }));
 }
 
 /** How a staff member is reached for operational alerts (concierge new requests / assignments). */

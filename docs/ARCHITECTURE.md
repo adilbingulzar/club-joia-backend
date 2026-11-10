@@ -12,7 +12,7 @@ src/services/*.service.ts  ── ALL business rules + permission checks + audit
    │        uses
    ├── src/domain/*        pure decision logic (access engine, entitlements, membership, concierge rules)
    ├── src/lib/qr/token.ts pure QR signing/verification
-   └── src/lib/db.ts       Prisma client (PostgreSQL)
+   └── src/lib/db.ts       Prisma client (MySQL, via src/lib/db-adapter.ts)
 ```
 
 - **Services never read cookies or headers.** They receive an `Actor`. The same functions can be called by pages, actions, cron jobs, tests and (in Phase 3) the AI concierge agent or a native app.
@@ -72,7 +72,15 @@ The schema has `mfaEnabled`, `mfaSecretEncrypted` and `mfaEnrolledAt` on users, 
 
 ## 4. Database
 
-PostgreSQL via Prisma migrations (`prisma/migrations`). Every model is commented in `prisma/schema.prisma`.
+MySQL 8.0.13+ (MariaDB 10.6+ also works) via Prisma migrations (`prisma/migrations`) and the `@prisma/adapter-mariadb` driver adapter. Every model is commented in `prisma/schema.prisma`.
+
+MySQL-specific conventions:
+
+- **UTC everywhere.** `src/lib/db-adapter.ts` pins every connection to `time_zone = '+00:00'`. Prisma reads and writes `DATETIME(3)` values as UTC, and column defaults (`CURRENT_TIMESTAMP(3)`) and raw SQL use the session zone, so this keeps them consistent whatever the server's clock is set to. Raw SQL uses `UTC_TIMESTAMP(3)` explicitly.
+- **Lists are JSON arrays** (`users.concierge_categories`, `notifications.channels` and the dormant networking lists on `members`). MySQL has no array columns. Services read them through `src/lib/json-list.ts`, which returns typed arrays. JSON defaults (`[]`, `{}`) are applied by Prisma Client, not by MySQL, so raw `INSERT`s must supply them.
+- **Text sizes.** Prisma maps `String` to `VARCHAR(191)` on MySQL. Free text is `@db.Text`, and anything that can be longer than 191 characters (emails up to 254, user agents, push endpoints) has an explicit `@db.VarChar(n)`.
+- **Case-insensitive search** comes from the `utf8mb4_unicode_ci` collation, so queries use a plain `contains` (Prisma's `mode: "insensitive"` is PostgreSQL-only).
+- **DDL is not transactional in MySQL.** A migration that fails part-way leaves the statements before it applied. Fix the database by hand, then `prisma migrate resolve`.
 
 - **Identity:** `users`, `sessions`, `auth_tokens`, `auth_identities`, `rate_limit_buckets`, `consent_records`.
 - **Members:** `members` (profile + dormant Phase 2 networking fields), `chapters`, `membership_tiers`, `memberships` (status, dates, home chapter, `kind` EVENT/ANNUAL), `entitlements`, `tier_entitlements`, `member_entitlements` (overrides).
@@ -145,11 +153,11 @@ Scheduled notifications are processed by `/api/cron/notifications`. System event
 
 ## 8. Privacy & security
 
-- Server-side authorisation everywhere. Zod validation on every input. Prisma parameterisation, plus one raw query (rate limiter) using tagged parameters.
+- Server-side authorisation everywhere. Zod validation on every input. Prisma parameterisation, plus two raw queries (rate limiter, next membership number) using tagged parameters.
 - Uploads are checked by magic bytes and size (no SVG), stored under random keys, and served only through `/api/files/*` after an ownership/role check, with a sandboxed CSP.
 - Security headers: CSP (`frame-ancestors 'none'`, own-origin only), HSTS on HTTPS, `nosniff`, `Referrer-Policy: no-referrer`, and a Permissions-Policy allowing only the camera.
 - **GDPR:** consent records (terms, privacy, marketing, push), JSON data export, member-initiated deletion request, and admin **anonymisation**. Anonymisation erases PII but keeps tickets, scans and audit rows against an anonymous record.
-- Audit log: `audit_logs` is protected by a PostgreSQL trigger that rejects UPDATE, DELETE and TRUNCATE. Secrets are redacted from snapshots.
+- Audit log: `audit_logs` is protected by MySQL triggers that reject UPDATE and DELETE. MySQL triggers cannot stop `TRUNCATE` (which needs the DROP privilege), so the production runtime user must not hold DROP, ALTER or TRIGGER (see Deployment in the README). Secrets are redacted from snapshots.
 - Errors: users see polite messages. Unexpected errors carry a reference (`ERR-…`, or the Next.js digest), and admin error pages show it for diagnosis. Stack traces never reach the client.
 
 ## 9. Future phases — how the foundation anticipates them

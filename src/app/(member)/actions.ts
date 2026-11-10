@@ -118,8 +118,11 @@ export async function requestDeletionAction(_prev: FormState, form: FormData): P
   });
 }
 
+/** Matches push_subscriptions.endpoint (VARCHAR(768), the longest a unique index allows in utf8mb4). */
+const PUSH_ENDPOINT_MAX = 768;
+
 const pushSubSchema = z.object({
-  endpoint: z.url().max(1000),
+  endpoint: z.url().max(PUSH_ENDPOINT_MAX),
   keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }),
 });
 
@@ -130,7 +133,7 @@ export async function savePushSubscriptionAction(sub: unknown) {
 }
 
 export async function removePushSubscriptionAction(endpoint: string) {
-  return authedAction(z.string().max(1000), endpoint, async (actor, e) => {
+  return authedAction(z.string().max(PUSH_ENDPOINT_MAX), endpoint, async (actor, e) => {
     await removePushSubscription(actor, e);
   });
 }

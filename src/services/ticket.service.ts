@@ -211,10 +211,10 @@ export async function searchTickets(actor: Actor, s: TicketSearch = {}) {
     ...(q
       ? {
           OR: [
-            { ticketNumber: { contains: q, mode: "insensitive" } },
-            { member: { firstName: { contains: q, mode: "insensitive" } } },
-            { member: { lastName: { contains: q, mode: "insensitive" } } },
-            { member: { membershipNumber: { contains: q, mode: "insensitive" } } },
+            { ticketNumber: { contains: q } },
+            { member: { firstName: { contains: q } } },
+            { member: { lastName: { contains: q } } },
+            { member: { membershipNumber: { contains: q } } },
           ],
         }
       : {}),

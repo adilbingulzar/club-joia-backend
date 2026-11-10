@@ -6,6 +6,10 @@
 // - Human-facing references (membership numbers, ticket numbers) are separate unique columns.
 // - `metadata` JSON columns are for operational extras; anything queried or permission-relevant
 //   must be a real column.
+// - Database: MySQL 8.0.13+ (InnoDB, utf8mb4). Prisma maps `String` to VARCHAR(191) on MySQL, so
+//   free text uses @db.Text and anything that can exceed 191 chars has an explicit @db.VarChar(n).
+//   Lists (formerly PostgreSQL arrays) are JSON arrays; read them through src/lib/json-list.ts.
+//   Connections always run in UTC (see src/lib/db-adapter.ts).
 // - Phase 2 / Phase 3 tables are intentionally NOT created here — see docs/ARCHITECTURE.md.
 //   Dormant Phase 2 profile fields exist on `members` but are never exposed in V1.
 
@@ -15,7 +19,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,7 +43,7 @@ enum UserStatus {
 /// Login account. Every person who can sign in (member or staff) has exactly one user row.
 model User {
   id                String     @id @default(cuid())
-  email             String     @unique /// always stored lower-cased
+  email             String     @unique @db.VarChar(254) /// always stored lower-cased
   name              String /// display name for staff screens & audit trail
   passwordHash      String?    @map("password_hash")
   role              Role       @default(MEMBER)
@@ -52,14 +56,14 @@ model User {
 
   // MFA readiness (not enforced in V1 — see docs/ARCHITECTURE.md#mfa)
   mfaEnabled         Boolean   @default(false) @map("mfa_enabled")
-  mfaSecretEncrypted String?   @map("mfa_secret_encrypted")
+  mfaSecretEncrypted String?   @map("mfa_secret_encrypted") @db.Text
   mfaEnrolledAt      DateTime? @map("mfa_enrolled_at")
 
   // Staff contact & operational alerts (concierge new-request / assignment alerts)
   whatsappNumber      String?             @map("whatsapp_number") /// E.164, e.g. +971501234567
   alertByEmail        Boolean             @default(true) @map("alert_by_email")
   alertByWhatsapp     Boolean             @default(false) @map("alert_by_whatsapp")
-  conciergeCategories ConciergeCategory[] @default([]) @map("concierge_categories") /// request categories this person is responsible for
+  conciergeCategories Json                @default("[]") @map("concierge_categories") /// ConciergeCategory[]: request categories this person is responsible for
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -111,7 +115,7 @@ model Session {
   revokedAt   DateTime? @map("revoked_at")
   mfaVerified Boolean   @default(false) @map("mfa_verified")
   ipAddress   String?   @map("ip_address")
-  userAgent   String?   @map("user_agent")
+  userAgent   String?   @map("user_agent") @db.VarChar(500)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -170,10 +174,10 @@ model Member {
   company          String?
   jobTitle         String? @map("job_title")
   industry         String?
-  bio              String?
+  bio              String? @db.Text
 
-  dietaryRequirements   String? @map("dietary_requirements")
-  allergies             String?
+  dietaryRequirements   String? @map("dietary_requirements") @db.VarChar(500)
+  allergies             String? @db.VarChar(500)
   emergencyContactName  String? @map("emergency_contact_name")
   emergencyContactPhone String? @map("emergency_contact_phone")
   shirtSize             String? @map("shirt_size")
@@ -183,12 +187,12 @@ model Member {
 
   // ── Phase 2 networking (dormant in V1; never rendered, never public by default) ──
   networkingProfileEnabled Boolean  @default(false) @map("networking_profile_enabled")
-  networkingInterests      String[] @default([]) @map("networking_interests")
-  lookingToMeet            String[] @default([]) @map("looking_to_meet")
-  linkedinUrl              String?  @map("linkedin_url")
-  investmentInterests      String[] @default([]) @map("investment_interests")
+  networkingInterests      Json     @default("[]") @map("networking_interests") /// string[]
+  lookingToMeet            Json     @default("[]") @map("looking_to_meet") /// string[]
+  linkedinUrl              String?  @map("linkedin_url") @db.VarChar(500)
+  investmentInterests      Json     @default("[]") @map("investment_interests") /// string[]
   socialLinks              Json     @default("{}") @map("social_links")
-  publicProfileFields      String[] @default([]) @map("public_profile_fields")
+  publicProfileFields      Json     @default("[]") @map("public_profile_fields") /// string[]
 
   memberSince         DateTime  @default(now()) @map("member_since")
   deletionRequestedAt DateTime? @map("deletion_requested_at")
@@ -226,7 +230,7 @@ model ConsentRecord {
   version   String
   granted   Boolean
   ipAddress String?     @map("ip_address")
-  userAgent String?     @map("user_agent")
+  userAgent String?     @map("user_agent") @db.VarChar(500)
   createdAt DateTime    @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -263,7 +267,7 @@ model MembershipTier {
   slug        String   @unique
   name        String
   displayName String   @map("display_name")
-  description String?
+  description String?  @db.Text
   color       String /// hex accent used in UI
   cardTheme   String   @default("ruby") @map("card_theme") /// ruby | pearl | black — maps to card visual
   sortOrder   Int      @default(0) @map("sort_order")
@@ -327,7 +331,7 @@ model Entitlement {
   id          String               @id @default(cuid())
   code        String               @unique /// e.g. vip_deck_access
   name        String
-  description String?
+  description String?          @db.Text
   category    String /// ACCESS | HOSPITALITY | SERVICE | GUEST
   valueType   EntitlementValueType @default(BOOLEAN) @map("value_type")
   active      Boolean              @default(true)
@@ -359,7 +363,7 @@ model MemberEntitlement {
   memberId      String    @map("member_id")
   entitlementId String    @map("entitlement_id")
   value         Json /// false revokes a tier-granted boolean entitlement
-  reason        String?
+  reason        String?   @db.Text
   expiresAt     DateTime? @map("expires_at")
   createdAt     DateTime  @default(now()) @map("created_at")
 
@@ -396,7 +400,7 @@ model Event {
   endDate     DateTime    @map("end_date") @db.Date
   status      EventStatus @default(DRAFT)
   heroImage   String?     @map("hero_image") /// storage key of an uploaded image (served via /api/files)
-  description String?
+  description String?     @db.Text
   metadata    Json        @default("{}") /// supportEmail, supportPhone, infoSections[]
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
@@ -420,7 +424,7 @@ model AccessZone {
   eventId                 String   @map("event_id")
   code                    String
   name                    String
-  description             String?
+  description             String?  @db.Text
   requiredEntitlementCode String?  @map("required_entitlement_code") /// membership-level gate on top of ticket
   active                  Boolean  @default(true)
   sortOrder               Int      @default(0) @map("sort_order")
@@ -461,8 +465,8 @@ model EventProgramItem {
   startTime               String            @map("start_time") /// "HH:mm", local to event timezone
   endTime                 String?           @map("end_time")
   title                   String
-  subtitle                String?
-  description             String?
+  subtitle                String?           @db.VarChar(255)
+  description             String?           @db.Text
   location                String?
   category                ProgramCategory   @default(OTHER)
   icon                    String? /// key from src/domain/programme-icons.ts; null = chosen automatically
@@ -511,7 +515,7 @@ model TicketType {
   eventId     String      @map("event_id")
   code        String
   name        String
-  description String?
+  description String?     @db.Text
   validFrom   DateTime    @map("valid_from")
   validUntil  DateTime    @map("valid_until")
   entryPolicy EntryPolicy @default(MULTI_ENTRY) @map("entry_policy")
@@ -561,7 +565,7 @@ model Ticket {
   issuedById   String?      @map("issued_by_id")
   revokedAt    DateTime?    @map("revoked_at")
   revokedById  String?      @map("revoked_by_id")
-  revokeReason String?      @map("revoke_reason")
+  revokeReason String?      @map("revoke_reason") @db.Text
   metadata     Json         @default("{}")
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
@@ -589,7 +593,7 @@ model TicketCredential {
   version       Int
   issuedAt      DateTime  @default(now()) @map("issued_at")
   revokedAt     DateTime? @map("revoked_at")
-  revokeReason  String?   @map("revoke_reason")
+  revokeReason  String?   @map("revoke_reason") @db.Text
 
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
@@ -652,7 +656,7 @@ model TicketScanLog {
   method      ScanMethod
   result      ScanResult
   reason      String?
-  deviceInfo  String?    @map("device_info")
+  deviceInfo  String?    @map("device_info") @db.VarChar(300)
   location    String?
   metadata    Json       @default("{}")
 
@@ -713,14 +717,14 @@ model ConciergeRequest {
   eventId        String?           @map("event_id")
   category       ConciergeCategory
   subject        String
-  description    String
+  description    String            @db.Text
   status         ConciergeStatus   @default(NEW)
   priority       ConciergePriority @default(NORMAL)
   assignedToId   String?           @map("assigned_to_id")
   preferredDate  DateTime?         @map("preferred_date") @db.Date
   preferredTime  String?           @map("preferred_time")
   numberOfPeople Int?              @map("number_of_people")
-  notes          String?
+  notes          String?           @db.Text
   source         ActorType         @default(MEMBER)
   closedAt       DateTime?         @map("closed_at")
   createdAt      DateTime          @default(now()) @map("created_at")
@@ -741,10 +745,10 @@ model ConciergeRequestMessage {
   requestId      String    @map("request_id")
   senderId       String?   @map("sender_id") /// null for SYSTEM messages
   senderType     ActorType @map("sender_type")
-  message        String
+  message        String    @db.Text
   internalNote   Boolean   @default(false) @map("internal_note") /// never visible to members
   attachmentKey  String?   @map("attachment_key")
-  attachmentName String?   @map("attachment_name")
+  attachmentName String?   @map("attachment_name") @db.VarChar(255)
   createdAt      DateTime  @default(now()) @map("created_at")
 
   request ConciergeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
@@ -804,13 +808,13 @@ enum DeliveryStatus {
 model Notification {
   id          String                 @id @default(cuid())
   title       String
-  body        String
+  body        String                 @db.Text
   type        NotificationType       @default(ANNOUNCEMENT)
   targetType  NotificationTargetType @map("target_type")
   targetId    String?                @map("target_id") /// tier id / event id / member id
   eventId     String?                @map("event_id")
-  url         String? /// in-app deep link (relative path)
-  channels    DeliveryChannel[]      @default([IN_APP, WEB_PUSH])
+  url         String?                @db.VarChar(255) /// in-app deep link (relative path)
+  channels    Json                   @default("[\"IN_APP\",\"WEB_PUSH\"]") /// DeliveryChannel[]
   scheduledAt DateTime?              @map("scheduled_at")
   sentAt      DateTime?              @map("sent_at")
   status      NotificationStatus     @default(DRAFT)
@@ -833,7 +837,7 @@ model NotificationRecipient {
   memberId        String          @map("member_id")
   deliveryChannel DeliveryChannel @map("delivery_channel")
   deliveryStatus  DeliveryStatus  @default(PENDING) @map("delivery_status")
-  error           String?
+  error           String?         @db.VarChar(255)
   sentAt          DateTime?       @map("sent_at")
   readAt          DateTime?       @map("read_at")
   createdAt       DateTime        @default(now()) @map("created_at")
@@ -849,10 +853,10 @@ model NotificationRecipient {
 model PushSubscription {
   id           String    @id @default(cuid())
   userId       String    @map("user_id")
-  endpoint     String    @unique
+  endpoint     String    @unique @db.VarChar(768) /// push service URLs can exceed 191 chars; 768 = utf8mb4 index limit
   p256dh       String
   auth         String
-  userAgent    String?   @map("user_agent")
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
   failureCount Int       @default(0) @map("failure_count")
   disabledAt   DateTime? @map("disabled_at")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -899,7 +903,7 @@ model SystemSetting {
   @@map("system_settings")
 }
 
-/// Append-only. UPDATE and DELETE are blocked by a database trigger (see migration).
+/// Append-only. UPDATE and DELETE are blocked by database triggers (see the init migration).
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?  @map("actor_user_id")
@@ -909,7 +913,7 @@ model AuditLog {
   beforeData  Json?    @map("before_data")
   afterData   Json?    @map("after_data")
   ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
+  userAgent   String?  @map("user_agent") @db.VarChar(500)
   createdAt   DateTime @default(now()) @map("created_at")
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
