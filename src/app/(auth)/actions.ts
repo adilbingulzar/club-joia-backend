@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { homePathFor } from "@/lib/auth/permissions";
+import { homePathFor, mfaRequired } from "@/lib/auth/permissions";
 import { clearSessionCookie, readSessionToken, requestMeta, writeSessionCookie } from "@/lib/auth/session";
 import { validationError } from "@/lib/actions";
 import { AppError, toActionError, type ActionError } from "@/lib/errors";
@@ -34,6 +34,8 @@ export async function loginAction(_prev: AuthFormState, form: FormData): Promise
     // Members can't be bounced into staff areas (and vice versa) by a crafted ?next=.
     const nextAllowed = next && (result.role === "MEMBER" ? !next.startsWith("/admin") && !next.startsWith("/staff") : next.startsWith("/admin") || next.startsWith("/staff"));
     destination = nextAllowed ? next! : homePathFor(result.role);
+    // Admins confirm an authenticator code before anything else (/admin/mfa), then go on.
+    if (mfaRequired(result.role)) destination = "/admin/mfa" + (nextAllowed ? `?next=${encodeURIComponent(next!)}` : "");
   } catch (e) {
     return { error: toActionError(e), values: { email: str(form, "email") } };
   }
@@ -81,7 +83,7 @@ export async function activateAction(_prev: AuthFormState, form: FormData): Prom
     if (!parsed.success) throw validationError(parsed.error);
     const result = await activateAccount(parsed.data.token, parsed.data.password, await requestMeta());
     await writeSessionCookie(result.token, result.expiresAt);
-    destination = result.role === "MEMBER" ? "/?welcome=1" : homePathFor(result.role);
+    destination = result.role === "MEMBER" ? "/?welcome=1" : mfaRequired(result.role) ? "/admin/mfa" : homePathFor(result.role);
   } catch (e) {
     return { error: toActionError(e) };
   }

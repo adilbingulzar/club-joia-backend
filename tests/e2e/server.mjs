@@ -31,7 +31,7 @@ mkdirSync(".data", { recursive: true });
 writeFileSync(".data/e2e-db-url", url);
 
 const next = spawn("npx", ["next", "dev", "--port", "3100"], {
-  env: { ...env, NEXT_DIST_DIR: ".next-e2e", NEXT_PUBLIC_APP_URL: "http://localhost:3100" },
+  env: { ...env, NEXT_DIST_DIR: ".next-e2e", NEXT_PUBLIC_APP_URL: "http://localhost:3100", MFA_ENCRYPTION_KEY: "e2e-mfa-key-e2e-mfa-key-e2e-mfa-key-0001" },
   stdio: "inherit",
 });
 const cleanup = async () => {

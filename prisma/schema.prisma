@@ -54,10 +54,11 @@ model User {
   lockedUntil       DateTime?  @map("locked_until")
   passwordChangedAt DateTime?  @map("password_changed_at")
 
-  // MFA readiness (not enforced in V1 — see docs/ARCHITECTURE.md#mfa)
-  mfaEnabled         Boolean   @default(false) @map("mfa_enabled")
-  mfaSecretEncrypted String?   @map("mfa_secret_encrypted") @db.Text
+  // Authenticator-app MFA, required for ADMIN and SUPER_ADMIN (docs/ARCHITECTURE.md#mfa)
+  mfaEnabled         Boolean   @default(false) @map("mfa_enabled") /// true once the first code was confirmed
+  mfaSecretEncrypted String?   @map("mfa_secret_encrypted") @db.Text /// TOTP secret, AES-256-GCM with MFA_ENCRYPTION_KEY
   mfaEnrolledAt      DateTime? @map("mfa_enrolled_at")
+  mfaLastUsedStep    Int?      @map("mfa_last_used_step") /// 30-second step of the last accepted code: a code works only once
 
   // Staff contact & operational alerts (concierge new-request / assignment alerts)
   whatsappNumber      String?             @map("whatsapp_number") /// E.164, e.g. +971501234567

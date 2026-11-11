@@ -64,7 +64,14 @@ Defined once in `src/lib/auth/permissions.ts` (`ROLE_PERMISSIONS`) and unit test
 
 ### MFA
 
-The schema has `mfaEnabled`, `mfaSecretEncrypted` and `mfaEnrolledAt` on users, plus `mfaVerified` on sessions. `mfaRecommended(role)` marks ADMIN and SUPER_ADMIN. Planned work: TOTP enrolment, a verification step that sets `session.mfaVerified`, and a `requirePermission` check that rejects admin permissions on non-MFA sessions once enforcement is on.
+ADMIN and SUPER_ADMIN (`mfaRequired(role)`) sign in with their password **and** a code from an authenticator app (TOTP, RFC 6238: SHA-1, 30-second steps, 6 digits; `src/lib/security/totp.ts`, no third-party library).
+
+- **Pending sessions.** After the password, an admin session has `sessions.mfa_verified = false`. `validateSessionToken()` treats it as no session at all, so every page, Server Action and API route sees a signed-out user. Only the MFA step reads it (`getMfaPendingUser()` in the DAL), and `requireActor()` sends it to `/admin/mfa`.
+- **Set-up.** The first time, `/admin/mfa` shows a QR code (`otpauth://` URI) and the same secret as text. The secret is stored encrypted (AES-256-GCM, key from `MFA_ENCRYPTION_KEY`) in `users.mfa_secret_encrypted`. The first correct code sets `mfa_enabled` and `mfa_enrolled_at`.
+- **Every sign-in.** The current code marks the session verified. Codes from one step either side of now are accepted (phone clock drift). Each code works once: `users.mfa_last_used_step` is claimed atomically. Five codes in 15 minutes (rate limit `mfa:user:<id>`) revoke the session.
+- **Lost phone.** A super admin resets the person's two-factor sign-in on Admin → Staff, which signs them out everywhere; they set it up again at the next sign-in. A super admin who lost their own phone runs `npm run admin:create -- <email>` on the server, which also resets MFA.
+- **Audit:** `auth.mfa_enrolled`, `auth.mfa_verified`, `auth.mfa_failed`, `auth.mfa_locked`, `staff.mfa_reset`.
+- **Sales dashboard.** club-joia-300-next's `/admin` checks the same codes against the same `users` columns, with a copy of `totp.ts` and the same `MFA_ENCRYPTION_KEY`. Admins set up their authenticator here first.
 
 ### Future sign-in methods
 

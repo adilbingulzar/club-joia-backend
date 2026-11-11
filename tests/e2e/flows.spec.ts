@@ -3,6 +3,7 @@ import path from "node:path";
 import { chromium, devices, expect, test, type Page } from "@playwright/test";
 import QRCode from "qrcode";
 import { connectDatabase } from "../support/mysql-admin.mjs";
+import { totpCode, totpStep } from "../../src/lib/security/totp";
 
 /**
  * End-to-end flows from the V1 spec:
@@ -22,12 +23,33 @@ const qrVideo = path.resolve("test-results/member-qr.y4m");
 let ticketNumber = "";
 let qrToken = "";
 
+// Admins' authenticator secrets (set up at their first sign-in) and the last time step used:
+// a code works only once, so a second sign-in in the same 30 seconds waits for the next code.
+const authenticators = new Map<string, { secret: string; lastStep: number }>();
+
 async function login(page: Page, email: string, password: string, loginPath = "/login") {
   await page.goto(loginPath);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => u.pathname !== loginPath);
+  if (new URL(page.url()).pathname === "/admin/mfa") await confirmMfa(page, email);
+}
+
+/** The two-factor step of admin accounts: set up the authenticator the first time, then a fresh code. */
+async function confirmMfa(page: Page, email: string) {
+  let auth = authenticators.get(email);
+  if (!auth) {
+    await expect(page.getByRole("heading", { name: "Set up two-factor sign-in" })).toBeVisible();
+    const key = (await page.locator("p.font-mono").innerText()).replace(/\s/g, "");
+    auth = { secret: key, lastStep: 0 };
+    authenticators.set(email, auth);
+  }
+  while (totpStep() <= auth.lastStep) await page.waitForTimeout(1000);
+  auth.lastStep = totpStep();
+  await page.getByRole("textbox", { name: /code/i }).fill(totpCode(auth.secret, auth.lastStep));
+  await page.getByRole("button", { name: /continue/i }).click();
+  await page.waitForURL((u) => u.pathname !== "/admin/mfa");
 }
 
 /** Writes a looping Y4M video (grayscale) containing the QR code, for Chromium's fake camera. */

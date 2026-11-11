@@ -123,6 +123,7 @@ A QR code contains only `CJ1.<payload>.<HMAC-SHA256>`. The payload is `{ r: cred
 
 - **First production super admin:** on the server, run `npm run admin:create -- you@example.com "Your Name"`. It creates (or resets) an active super admin and prints a one-time random password. Then invite everyone else from the admin.
 - **Further staff:** Admin → Staff (super admin only). Choose a role, plus WhatsApp number, alert channels and concierge categories. You receive a one-time activation link to share securely while no email provider is configured. Staff sign in at `/admin/login`. Role changes and disabling sign the person out everywhere.
+- **Two-factor sign-in:** admins and super admins also enter a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password …). At their first sign-in they scan a QR code. Lost phone: Admin → Staff → Two-factor → Reset, or `npm run admin:create -- <email>` for a super admin. Needs `MFA_ENCRYPTION_KEY` (same value in club-joia-300-next). Details: [`docs/ARCHITECTURE.md#mfa`](docs/ARCHITECTURE.md#mfa).
 - **Members:** Admin → Members → New member. This creates an invited membership and an activation link. Activation sets the password, records consent to the terms and privacy policy, and activates the membership.
 
 ## Deployment
@@ -133,7 +134,8 @@ Any Linux server with Node.js 20.19+ (22 LTS recommended) and MySQL 8, with the 
 2. Build and migrate: `npm ci --include=dev && npm run build && npm run db:deploy`, then restart the app. `--include=dev` matters when `NODE_ENV=production` is set, because the build needs dev dependencies.
 3. **Migration user and triggers:** the init migration creates the audit-log triggers. With binary logging on (the MySQL 8 default), MySQL only allows that for a user with SUPER, or after `SET PERSIST log_bin_trust_function_creators = 1;`. MySQL DDL is not transactional: if a migration fails part-way, fix the database, then run `npx prisma migrate resolve`.
 4. **No destructive Prisma commands:** `prisma.config.ts` refuses `migrate reset`, `migrate dev`, `db push` and `db execute`, whatever the database user, so the Prisma CLI cannot wipe or drop data. Application code is not affected. Migrations still run with `npm run db:deploy`, and the seed with `npm run db:seed`. MySQL triggers cannot block `TRUNCATE`, so in production the app's database user should not hold DROP.
-5. **Client IP:** the app takes the first `X-Forwarded-For` entry as the client IP (rate limits, audit log). The proxy must **overwrite** it, e.g. Nginx `proxy_set_header X-Forwarded-For $remote_addr;`, not `$proxy_add_x_forwarded_for`. Also set `client_max_body_size 12m;` for uploads.
+5. **IP allowlist (optional):** `IP_ALLOWLIST` (addresses and CIDR ranges) closes the whole app, every page, API and file, to any other address (403). It reads the last `X-Forwarded-For` entry, so `next start` must listen on 127.0.0.1 only (`next start -H 127.0.0.1`), behind nginx. Members outside the list are locked out too.
+   **Client IP:** the app takes the first `X-Forwarded-For` entry as the client IP (rate limits, audit log). The proxy must **overwrite** it, e.g. Nginx `proxy_set_header X-Forwarded-For $remote_addr;`, not `$proxy_add_x_forwarded_for`. Also set `client_max_body_size 12m;` for uploads.
 6. **Uploads:** with `STORAGE_DRIVER=local`, set `STORAGE_LOCAL_DIR` to an absolute path outside the app folder so deployments never remove it, and back it up with the database.
 7. **Scheduled notifications:** call `GET /api/cron/notifications` every minute with `Authorization: Bearer $CRON_SECRET`, e.g. `curl -fsS -H "Authorization: Bearer …" http://127.0.0.1:3000/api/cron/notifications`.
 8. First admin: `npm run admin:create -- you@example.com "Your Name"` (see above). Never run `npm run db:seed` in production.
@@ -155,7 +157,6 @@ These are **not done in V1** and need decisions or inputs before launch:
 - **Production admin accounts**, with the seeded `@joia.test` accounts removed.
 - **Brand assets:** the official logos (`public/brand/CJ300_Logo_{wht,blk,clr}.png`) are in use. The **app icon** (`app-icon-source.svg` → `npm run icons`) is still a typographic placeholder. The Ultra Black card uses the white logo, since the black one would be invisible on it.
 - **Event hero image** (Admin → Events → Hero image).
-- **MFA for admin accounts:** the schema is ready, enrolment is not built.
 - **Monitoring and error reporting** (e.g. Sentry) and uptime checks.
 - **Load test** of scanning for peak arrival.
 - **Penetration test** before go-live.

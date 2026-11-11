@@ -5,7 +5,7 @@ import { env } from "@/lib/config/env";
 import { AppError } from "@/lib/errors";
 import { hashSecretToken, randomToken } from "@/lib/crypto";
 import { enforceRateLimit, hitRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
-import { isStaff } from "@/lib/auth/permissions";
+import { isStaff, mfaRequired } from "@/lib/auth/permissions";
 import type { AuthTokenType, Role } from "@/generated/prisma/enums";
 import { recordAudit } from "./audit.service";
 import { activationEmail, passwordResetEmail, sendEmail } from "./email.service";
@@ -76,9 +76,20 @@ export type SessionUser = {
   role: Role;
   memberId: string | null;
   firstName: string | null;
+  /** Admin roles: the password is confirmed, the authenticator code not yet (see mfa.service). */
+  mfaPending: boolean;
+  /** An authenticator is set up (otherwise a pending session is asked to set one up). */
+  mfaEnabled: boolean;
 };
 
-export async function validateSessionToken(token: string | undefined | null): Promise<SessionUser | null> {
+/**
+ * The session's user, or null. An admin session whose authenticator code isn't confirmed yet is
+ * no session at all for pages, actions and APIs; only the MFA step asks for it (allowMfaPending).
+ */
+export async function validateSessionToken(
+  token: string | undefined | null,
+  { allowMfaPending = false }: { allowMfaPending?: boolean } = {},
+): Promise<SessionUser | null> {
   if (!token || token.length > 100) return null;
   const session = await db.session.findUnique({
     where: { tokenHash: tokenHash(token) },
@@ -87,6 +98,8 @@ export async function validateSessionToken(token: string | undefined | null): Pr
   const now = Date.now();
   if (!session || session.revokedAt || session.expiresAt.getTime() <= now) return null;
   if (session.user.status !== "ACTIVE") return null;
+  const mfaPending = mfaRequired(session.user.role) && !session.mfaVerified;
+  if (mfaPending && !allowMfaPending) return null;
 
   if (now - session.lastSeenAt.getTime() > LAST_SEEN_RESOLUTION_MS) {
     await db.session.update({ where: { id: session.id }, data: { lastSeenAt: new Date(now) } }).catch(() => {});
@@ -99,6 +112,8 @@ export async function validateSessionToken(token: string | undefined | null): Pr
     role: session.user.role,
     memberId: session.user.member?.id ?? null,
     firstName: session.user.member?.firstName ?? null,
+    mfaPending,
+    mfaEnabled: session.user.mfaEnabled,
   };
 }
 

@@ -3,6 +3,7 @@ if (!url) throw new Error("Integration global setup did not provide TEST_RUN_DAT
 process.env.DATABASE_URL = url;
 process.env.AUTH_SECRET ??= "test-auth-secret-test-auth-secret-0001";
 process.env.QR_SIGNING_SECRET ??= "test-qr-secret-test-qr-secret-test-0001";
+process.env.MFA_ENCRYPTION_KEY ??= "test-mfa-key-test-mfa-key-test-mfa-0001";
 // Push is exercised as "not configured" in tests (no network calls).
 delete process.env.WEB_PUSH_PUBLIC_KEY;
 delete process.env.WEB_PUSH_PRIVATE_KEY;

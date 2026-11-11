@@ -27,6 +27,7 @@ import {
 } from "@/services/programme.service";
 import { updateSettings } from "@/services/settings.service";
 import { changeRole, createStaff, resendStaffInvitation, setStaffStatus, updateStaffContact } from "@/services/staff.service";
+import { resetMfa } from "@/services/mfa.service";
 import { issueTicket, issueTicketsBulk, reissueCredential, revokeTicket, setTicketSuspended, upsertTicketType } from "@/services/ticket.service";
 import {
   assignMembershipSchema,
@@ -372,6 +373,13 @@ export async function changeRoleAction(userId: string, role: string) {
 export async function setStaffStatusAction(userId: string, status: "ACTIVE" | "DISABLED") {
   return authedAction(z.object({ userId: id, status: z.enum(["ACTIVE", "DISABLED"]) }), { userId, status }, async (actor, d) => {
     await setStaffStatus(actor, d.userId, d.status);
+    revalidatePath("/admin/staff");
+  });
+}
+
+export async function resetStaffMfaAction(userId: string) {
+  return authedAction(id, userId, async (actor, u) => {
+    await resetMfa(actor, u);
     revalidatePath("/admin/staff");
   });
 }

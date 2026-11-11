@@ -44,6 +44,13 @@ const schema = z.object({
   TWILIO_WHATSAPP_CONTENT_SID: z.string().optional(),
 
   CRON_SECRET: z.string().min(16).optional(),
+
+  /**
+   * Encrypts the authenticator-app secrets of admin accounts (MFA). At least 32 characters, e.g.
+   * `openssl rand -base64 32`. club-joia-300-next must have the same value. Admins can't sign in
+   * without it; changing it makes every admin set up their authenticator again.
+   */
+  MFA_ENCRYPTION_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(32, "MFA_ENCRYPTION_KEY must be at least 32 characters").optional()),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

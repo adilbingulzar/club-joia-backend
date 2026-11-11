@@ -4,7 +4,7 @@ import { JoiaLogo } from "@/components/joia/joia-logo";
 import { PermissionBadge } from "@/components/joia/badges";
 import { AdminNav, AdminNavFrame } from "@/components/admin/admin-nav";
 import { requirePermissionPage } from "@/lib/auth/dal";
-import { can, PERMISSIONS, mfaRecommended } from "@/lib/auth/permissions";
+import { can, PERMISSIONS } from "@/lib/auth/permissions";
 import { getSessionUser } from "@/lib/auth/dal";
 import { logoutAction } from "@/app/(auth)/actions";
 
@@ -46,11 +46,6 @@ async function AdminIdentity() {
   if (!user) return null;
   return (
     <div className="flex items-center gap-3 text-sm">
-      {mfaRecommended(user.role) && (
-        <span className="hidden text-[11px] text-black/45 xl:inline" title="Multi-factor authentication is planned for admin accounts">
-          MFA: planned
-        </span>
-      )}
       <span className="text-black/70">{user.name}</span>
       <PermissionBadge role={user.role} />
       <form action={logoutAction}>

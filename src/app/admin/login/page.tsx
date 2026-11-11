@@ -5,7 +5,7 @@ import { ShieldCheck } from "lucide-react";
 import { JoiaLogo } from "@/components/joia/joia-logo";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/app/(auth)/login/login-form";
-import { getActor } from "@/lib/auth/dal";
+import { getActor, getMfaPendingUser } from "@/lib/auth/dal";
 import { homePathFor } from "@/lib/auth/permissions";
 
 export const metadata: Metadata = { title: "Staff sign in", robots: { index: false, follow: false } };
@@ -47,6 +47,8 @@ async function Form({ searchParams }: Pick<PageProps<"/admin/login">, "searchPar
   const [sp, actor] = await Promise.all([searchParams, getActor()]);
   // Already signed in as staff → straight to the portal.
   if (actor && actor.role !== "MEMBER") redirect(homePathFor(actor.role));
+  // Password already confirmed, the authenticator code not yet.
+  if (!actor && (await getMfaPendingUser())) redirect("/admin/mfa");
   const next = typeof sp.next === "string" ? sp.next : undefined;
   return <LoginForm portal="staff" next={next} resetDone={sp.reset === "1"} />;
 }

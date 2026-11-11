@@ -11,12 +11,12 @@ import { ActionButton, ActionForm } from "@/components/admin/action-controls";
 import { PermissionBadge, StatusBadge } from "@/components/joia/badges";
 import { LoadingSkeleton } from "@/components/joia/states";
 import { Checkbox, Notice, SelectField, TextField } from "@/components/ui/form";
-import { ROLE_LABELS } from "@/lib/auth/permissions";
+import { mfaRequired, ROLE_LABELS } from "@/lib/auth/permissions";
 import { CONCIERGE_CATEGORY_LABELS } from "@/domain/concierge";
 import { formatDateTime } from "@/lib/utils";
 import { sp, type SP } from "@/lib/search-params";
 import { CONCIERGE_CATEGORY_VALUES, STAFF_ROLE_VALUES } from "@/validators/admin";
-import { createStaffAction, resendStaffInvitationAction, setStaffStatusAction, updateStaffContactAction } from "../actions";
+import { createStaffAction, resendStaffInvitationAction, resetStaffMfaAction, setStaffStatusAction, updateStaffContactAction } from "../actions";
 import { RoleSelect } from "./role-select";
 
 export const metadata: Metadata = { title: "Staff" };
@@ -63,7 +63,7 @@ async function Staff({ searchParams }: { searchParams: Promise<SP> }) {
   const whatsappOn = whatsappDeliveryConfigured();
   return (
     <>
-      <AdminPageHeader eyebrow="Security" title="Staff" description="Role changes sign the person out everywhere so new permissions apply immediately. Staff sessions last 12 hours. Staff sign in at /admin/login." />
+      <AdminPageHeader eyebrow="Security" title="Staff" description="Role changes sign the person out everywhere so new permissions apply immediately. Staff sessions last 12 hours. Staff sign in at /admin/login. Admins and super admins also enter a code from an authenticator app; resetting it makes them set it up again at their next sign-in." />
       {(!emailOn || !whatsappOn) && (
         <div className="mb-6">
           <Notice tone="light" title="Alert delivery not fully configured">
@@ -95,6 +95,17 @@ async function Staff({ searchParams }: { searchParams: Promise<SP> }) {
               ),
             },
             { header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
+            {
+              header: "Two-factor",
+              cell: (s) => (
+                <span className="flex items-center gap-1 text-xs text-black/60">
+                  {s.mfaEnabled ? "On" : mfaRequired(s.role) ? <span className="text-black/45">Set up at next sign-in</span> : <span className="text-black/40">Not required</span>}
+                  {s.mfaEnabled && s.id !== actor.userId && (
+                    <ActionButton label="Reset" variant="ghost" run={resetStaffMfaAction.bind(null, s.id)} confirm={{ title: `Reset two-factor sign-in for ${s.name}?`, description: "They are signed out everywhere and set up their authenticator app again at their next sign-in. Use this when they lost their phone.", destructive: true }} />
+                  )}
+                </span>
+              ),
+            },
             { header: "Last sign-in", cell: (s) => <span className="text-xs text-black/55">{s.lastLoginAt ? formatDateTime(s.lastLoginAt) : "never"}</span> },
             {
               header: "",

@@ -31,7 +31,6 @@ The two app folders share the same code except the theme (colours, logo variants
   - the email/WhatsApp providers;
   - legal texts;
   - the placeholders in `landing/privacy.html`;
-  - multi-factor sign-in (MFA) for staff;
   - the final event programme;
   - the final app icon.
 

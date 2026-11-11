@@ -94,8 +94,8 @@ export function isStaff(role: Role): boolean {
   return role !== "MEMBER";
 }
 
-/** Roles that should be MFA-protected once MFA ships (see docs/ARCHITECTURE.md#mfa). */
-export function mfaRecommended(role: Role): boolean {
+/** Roles that must confirm an authenticator code after their password (docs/ARCHITECTURE.md#mfa). */
+export function mfaRequired(role: Role): boolean {
   return role === "ADMIN" || role === "SUPER_ADMIN";
 }
 

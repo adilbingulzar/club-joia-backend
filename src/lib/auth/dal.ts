@@ -23,6 +23,17 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   return validateSessionToken(token);
 });
 
+/**
+ * An admin session waiting for its authenticator code (password confirmed), or null. Only the
+ * MFA step (/admin/mfa) uses it: everywhere else such a session counts as signed out.
+ */
+export const getMfaPendingUser = cache(async (): Promise<SessionUser | null> => {
+  const token = await readSessionToken();
+  await connection();
+  const user = await validateSessionToken(token, { allowMfaPending: true });
+  return user?.mfaPending ? user : null;
+});
+
 export const getActor = cache(async (): Promise<Actor | null> => {
   const user = await getSessionUser();
   if (!user) return null;
@@ -39,7 +50,7 @@ export const getActor = cache(async (): Promise<Actor | null> => {
 
 export async function requireActor(loginPath = "/login"): Promise<Actor> {
   const actor = await getActor();
-  if (!actor) redirect(loginPath);
+  if (!actor) redirect((await getMfaPendingUser()) ? "/admin/mfa" : loginPath);
   return actor;
 }
 

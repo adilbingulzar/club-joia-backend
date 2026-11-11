@@ -5,7 +5,9 @@
  *   npm run admin:create -- <email> "<Full name>"
  *
  * If the email already exists, the account is promoted to SUPER_ADMIN, activated, unlocked, its
- * password is replaced and all of its sessions are signed out. Reads DATABASE_URL from .env.
+ * password is replaced, its two-factor sign-in (authenticator app) is reset, and all of its
+ * sessions are signed out: the way back in for a super admin who lost their phone.
+ * Reads DATABASE_URL from .env.
  */
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
@@ -27,7 +29,11 @@ async function main() {
   const password = randomBytes(15).toString("base64url"); // 20 characters
   const passwordHash = await hash(password); // Argon2id, same parameters as the app
   const now = new Date();
-  const access = { role: "SUPER_ADMIN", status: "ACTIVE", passwordHash, passwordChangedAt: now, failedLoginCount: 0, lockedUntil: null } as const;
+  const access = {
+    role: "SUPER_ADMIN", status: "ACTIVE", passwordHash, passwordChangedAt: now, failedLoginCount: 0, lockedUntil: null,
+    // a new authenticator is set up at the next sign-in
+    mfaEnabled: false, mfaSecretEncrypted: null, mfaEnrolledAt: null, mfaLastUsedStep: null,
+  } as const;
 
   const existing = await db.user.findUnique({ where: { email } });
   const user = existing
@@ -41,6 +47,7 @@ async function main() {
   console.log(existing ? `Updated ${email}: now an active SUPER_ADMIN with a new password.` : `Created SUPER_ADMIN ${email} (${name}).`);
   console.log(`\n  Sign in at: ${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")}/admin/login`);
   console.log(`  Password:   ${password}\n\nThis password is shown only once. Store it in a password manager.`);
+  console.log("After the password, set up an authenticator app (scan the QR code shown at sign-in).");
 }
 
 main()
