@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import { SubmitButton } from "@/components/ui/button";
 import { FormMessage, TextField } from "@/components/ui/form";
@@ -35,11 +34,6 @@ export function LoginForm({ next, resetDone, portal = "member" }: { next?: strin
       <SubmitButton size="lg" className="w-full" pendingLabel="Signing in">
         Sign in
       </SubmitButton>
-      <p className="text-center text-sm text-pearl-dim">
-        <Link href="/forgot-password" className="underline-offset-4 hover:text-pearl hover:underline">
-          Forgotten your password?
-        </Link>
-      </p>
     </form>
   );
 }
