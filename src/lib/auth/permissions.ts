@@ -30,6 +30,7 @@ export const PERMISSIONS = [
   "scans:view",
   "notifications:send",
   "dashboard:view",
+  "sales:view",
   "audit:view",
   "staff:manage",
   "settings:manage",
@@ -71,6 +72,8 @@ const ADMIN: Permission[] = [
   "scans:view",
   "notifications:send",
   "dashboard:view",
+  // the website's ticket sales and pre-registrations (src/services/sales.service.ts)
+  "sales:view",
   "audit:view",
 ];
 

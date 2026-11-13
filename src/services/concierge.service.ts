@@ -27,6 +27,12 @@ import { runAfterResponse } from "@/lib/background";
  * functions so permissions, audit and notifications stay consistent.
  */
 
+/** Attachments count against the same per-user upload limit as profile photos. */
+async function storeAttachment(actor: Actor, attachment: File) {
+  await enforceRateLimit(`upload:${actor.userId}`, RATE_LIMITS.uploadPerUser.limit, RATE_LIMITS.uploadPerUser.window);
+  return storeUpload(attachment, "CONCIERGE_ATTACHMENT", actor.userId);
+}
+
 export type NewConciergeRequest = {
   category: ConciergeCategory;
   subject: string;
@@ -42,7 +48,7 @@ export async function createRequest(actor: Actor, input: NewConciergeRequest, at
   const memberId = requireMemberActor(actor);
   await enforceRateLimit(`concierge:${memberId}`, RATE_LIMITS.conciergePerMember.limit, RATE_LIMITS.conciergePerMember.window,
     "You have sent a lot of requests in the last hour. Please message concierge on an existing request instead.");
-  const upload = attachment && attachment.size > 0 ? await storeUpload(attachment, "CONCIERGE_ATTACHMENT", actor.userId) : null;
+  const upload = attachment && attachment.size > 0 ? await storeAttachment(actor, attachment) : null;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -134,7 +140,7 @@ export async function addMessage(actor: Actor, requestId: string, input: { messa
     if (input.internalNote) throw new AppError("FORBIDDEN", "Not allowed.");
     if (!memberCanReply(request.status)) throw new AppError("INVALID_STATE", "This request is closed. Please open a new request.");
   }
-  const upload = attachment && attachment.size > 0 ? await storeUpload(attachment, "CONCIERGE_ATTACHMENT", actor.userId) : null;
+  const upload = attachment && attachment.size > 0 ? await storeAttachment(actor, attachment) : null;
   const internal = Boolean(isStaff && input.internalNote);
 
   await db.$transaction(async (tx) => {

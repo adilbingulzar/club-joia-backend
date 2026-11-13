@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, Bell, CalendarRange, ClipboardList, ConciergeBell, Crown, LayoutDashboard, ListOrdered, ScanLine, Settings, Ticket, UserCog, Users,
+  Activity, Bell, CalendarRange, ChartColumn, ClipboardList, ConciergeBell, Crown, LayoutDashboard, ListOrdered, ScanLine, Settings, Ticket, UserCog, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Permission } from "@/lib/auth/permissions";
 
 export const ADMIN_NAV: { href: string; label: string; icon: typeof Users; permission: Permission }[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" },
+  { href: "/admin/sales", label: "Sales", icon: ChartColumn, permission: "sales:view" },
   { href: "/admin/members", label: "Members", icon: Users, permission: "members:view" },
   { href: "/admin/memberships", label: "Memberships", icon: Crown, permission: "tiers:manage" },
   { href: "/admin/events", label: "Events", icon: CalendarRange, permission: "programme:manage" },

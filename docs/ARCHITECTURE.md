@@ -47,7 +47,7 @@ Next.js 16 **Cache Components** is enabled. Layouts are static shells (brand chr
 | MEMBER | own profile, membership, card, tickets/QR, programme, concierge, notifications | anything about other members; admin; tiers; tickets |
 | CHECK_IN_STAFF | scanner: validate, check in, deny; sees **name, photo, tier, number, access** only | browse members, contact details, concierge notes |
 | CONCIERGE | all concierge requests, status, assignment, internal notes, messages; basic member info (contact and dietary) | tickets, tiers, roles, settings |
-| ADMIN | everything above + members, memberships, tiers/entitlements, programme, tickets, scans, notifications, dashboard, audit | staff roles, system settings, event configuration |
+| ADMIN | everything above + members, memberships, tiers/entitlements, programme, tickets, scans, notifications, dashboard, website sales and pre-registrations, audit | staff roles, system settings, event configuration |
 | SUPER_ADMIN | everything + staff and roles, settings, event configuration (dates, zones, ticket types) | — |
 
 Defined once in `src/lib/auth/permissions.ts` (`ROLE_PERMISSIONS`) and unit tested.
@@ -58,7 +58,7 @@ Defined once in `src/lib/auth/permissions.ts` (`ROLE_PERMISSIONS`) and unit test
 - Login creates a random 256-bit session token in an `httpOnly`, `SameSite=Lax` cookie. In production it is `Secure`, with the `__Host-` prefix. Only `HMAC(AUTH_SECRET, token)` is stored in `sessions`.
 - Member sessions last 30 days and staff sessions 12 hours. Disabling an account, changing a role, resetting a password or choosing "sign out everywhere" revokes sessions.
 - Activation and reset links are single-use (atomic claim), expire (72 h / 60 min) and are stored hashed.
-- Sign-in gives one generic answer for unknown, invited and wrong-password cases, so membership is not disclosed. Rate limits apply per IP and per email (DB-backed, shared across instances). Accounts lock for 15 minutes after 8 failures.
+- Sign-in gives one generic answer for unknown, invited and wrong-password cases, so membership is not disclosed. Rate limits apply per IP and per email (DB-backed, shared across instances); emails are lower-cased first, and a request without a client IP skips only the per-IP limit. There is no per-account lockout (its distinct answer disclosed accounts and let anyone lock a member out).
 - **CSRF:** Server Actions are origin-checked by Next.js. Route handlers are GET-only, or authorised by a bearer secret (cron).
 - `proxy.ts` only redirects cookie-less visitors to `/login`. Real authorisation is in the DAL and the services.
 
@@ -68,7 +68,7 @@ ADMIN and SUPER_ADMIN (`mfaRequired(role)`) sign in with their password **and** 
 
 - **Pending sessions.** After the password, an admin session has `sessions.mfa_verified = false`. `validateSessionToken()` treats it as no session at all, so every page, Server Action and API route sees a signed-out user. Only the MFA step reads it (`getMfaPendingUser()` in the DAL), and `requireActor()` sends it to `/admin/mfa`.
 - **Set-up.** The first time, `/admin/mfa` shows a QR code (`otpauth://` URI) and the same secret as text. The secret is stored encrypted (AES-256-GCM, key from `MFA_ENCRYPTION_KEY`) in `users.mfa_secret_encrypted`. The first correct code sets `mfa_enabled` and `mfa_enrolled_at`.
-- **Every sign-in.** The current code marks the session verified. Codes from one step either side of now are accepted (phone clock drift). Each code works once: `users.mfa_last_used_step` is claimed atomically. Five codes in 15 minutes (rate limit `mfa:user:<id>`) revoke the session.
+- **Every sign-in.** The current code marks the session verified. Codes from one step either side of now are accepted (phone clock drift). Each code works once: `users.mfa_last_used_step` is claimed atomically. After five failed codes in 15 minutes (rate limit `mfa:user:<id>`; correct codes don't count) the next attempt revokes the session.
 - **Lost phone.** A super admin resets the person's two-factor sign-in on Admin → Staff, which signs them out everywhere; they set it up again at the next sign-in. A super admin who lost their own phone runs `npm run admin:create -- <email>` on the server, which also resets MFA.
 - **Audit:** `auth.mfa_enrolled`, `auth.mfa_verified`, `auth.mfa_failed`, `auth.mfa_locked`, `staff.mfa_reset`.
 - **Sales dashboard.** club-joia-300-next's `/admin` checks the same codes against the same `users` columns, with a copy of `totp.ts` and the same `MFA_ENCRYPTION_KEY`. Admins set up their authenticator here first.
@@ -96,6 +96,8 @@ MySQL-specific conventions:
 - **Service:** `concierge_requests`, `concierge_request_messages` (with `internal_note`, `sender_type` including `AI_AGENT`).
 - **Comms:** `notifications`, `notification_recipients` (per channel), `push_subscriptions`.
 - **Ops:** `stored_files`, `system_settings`, `audit_logs` (append-only).
+
+- **The website's tables** (not in the Prisma schema): club-joia-300-next makes `shop_*` tables and `pre_registrations` in this same database (its `lib/shop/db.ts`). Prisma's `migrate dev` sees them as drift and offers a reset: answer no. Admin > Sales (`src/services/sales.service.ts`, permission `sales:view`) reads `shop_orders` and `pre_registrations` with raw SQL, read only. Days are counted in `SHOP_TIMEZONE` (default Asia/Dubai), amounts shown in `SHOP_CURRENCY` (default AED). Without those tables (a fresh database) the pages say so and show nothing. Each CSV download is written to the audit log (`sales.orders_exported`, `sales.registrations_exported`).
 
 Conventions: opaque CUID primary keys, separate human references (membership number, ticket number, request reference), `metadata` JSON only for non-queried extras, `onDelete: Restrict` on records that must never disappear (members are anonymised, not deleted).
 

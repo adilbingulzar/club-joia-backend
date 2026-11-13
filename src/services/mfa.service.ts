@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/config/env";
 import { AppError, notFound } from "@/lib/errors";
 import { mfaRequired, STAFF_ROLES } from "@/lib/auth/permissions";
-import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { hitRateLimit, releaseRateLimitHit } from "@/lib/security/rate-limit";
 import { decryptTotpSecret, encryptTotpSecret, generateTotpSecret, matchTotp, totpUri } from "@/lib/security/totp";
 import { recordAudit } from "./audit.service";
 import { revokeAllSessions, type RequestMeta, type SessionUser } from "./auth.service";
@@ -58,17 +58,20 @@ export async function startMfaEnrolment(user: SessionUser) {
 
 /**
  * Checks the code of a pending admin session. The first correct code also finishes the set-up.
- * Five wrong codes in 15 minutes end the session (the password is needed again).
+ * After five failed codes in 15 minutes (per user) the next attempt ends the session (the password
+ * is needed again). Correct codes don't count.
  */
 export async function verifyMfaCode(user: SessionUser, code: string, meta: RequestMeta) {
   if (!user.mfaPending) return;
   const key = encryptionKey();
-  try {
-    await enforceRateLimit(`mfa:user:${user.userId}`, VERIFY_LIMIT.limit, VERIFY_LIMIT.window);
-  } catch (e) {
+  // Every attempt reserves a hit before the code is checked, so parallel guesses can never get more
+  // than five codes checked; a correct code gives its hit back, so only failures count.
+  const limitKey = `mfa:user:${user.userId}`;
+  const { allowed } = await hitRateLimit(limitKey, VERIFY_LIMIT.limit, VERIFY_LIMIT.window);
+  if (!allowed) {
     await db.session.update({ where: { id: user.sessionId }, data: { revokedAt: new Date() } });
     await recordAudit({ userId: user.userId, ...meta }, { action: "auth.mfa_locked", entityType: "user", entityId: user.userId });
-    throw e;
+    throw new AppError("RATE_LIMITED", "Too many attempts. Please wait a few minutes and try again.");
   }
 
   const row = await db.user.findUniqueOrThrow({ where: { id: user.userId }, select: { mfaSecretEncrypted: true, mfaEnabled: true } });
@@ -92,6 +95,7 @@ export async function verifyMfaCode(user: SessionUser, code: string, meta: Reque
     await recordAudit({ userId: user.userId, ...meta }, { action: "auth.mfa_failed", entityType: "user", entityId: user.userId });
     throw new AppError("VALIDATION", "That code is not correct. Enter the current 6-digit code from your authenticator app.", { code: ["Incorrect code."] });
   }
+  await releaseRateLimitHit(limitKey);
 
   const enrolling = !row.mfaEnabled;
   await db.$transaction(async (tx) => {

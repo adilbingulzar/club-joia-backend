@@ -27,8 +27,6 @@ export const MEMBER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const STAFF_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const ACTIVATION_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_TTL_MS = 60 * 60 * 1000;
-const MAX_FAILED_LOGINS = 8;
-const LOCKOUT_MS = 15 * 60 * 1000;
 const LAST_SEEN_RESOLUTION_MS = 5 * 60 * 1000;
 
 const tokenHash = (token: string) => hashSecretToken(token, env().AUTH_SECRET);
@@ -151,12 +149,31 @@ export async function listActiveSessions(actor: Actor) {
 
 // ─── Login ───────────────────────────────────────────────────────────────────
 
-export async function authenticate(email: string, password: string, meta: RequestMeta) {
-  await enforceRateLimit(`login:ip:${meta.ipAddress ?? "unknown"}`, RATE_LIMITS.loginPerIp.limit, RATE_LIMITS.loginPerIp.window);
+/** Emails are stored lower-cased; normalise here too so limiter keys can't be dodged by case/spaces. */
+const normaliseEmail = (email: string) => email.trim().toLowerCase();
+
+/**
+ * Per-IP limit. A request without a client IP skips it (logged) instead of sharing one global
+ * "unknown" bucket that anyone could fill to lock everybody out; per-email limits still apply.
+ */
+async function enforcePerIpLimit(scope: string, meta: RequestMeta, { limit, window }: { limit: number; window: number }) {
+  if (!meta.ipAddress) {
+    console.warn(`[rate-limit] ${scope}: request has no client IP, per-IP limit skipped`);
+    return;
+  }
+  await enforceRateLimit(`${scope}:ip:${meta.ipAddress}`, limit, window);
+}
+
+export async function authenticate(rawEmail: string, password: string, meta: RequestMeta) {
+  const email = normaliseEmail(rawEmail);
+  await enforcePerIpLimit("login", meta, RATE_LIMITS.loginPerIp);
   await enforceRateLimit(`login:email:${email}`, RATE_LIMITS.loginPerEmail.limit, RATE_LIMITS.loginPerEmail.window);
 
   // One message for unknown, not-yet-activated and wrong-password cases: membership of a
   // private club is itself sensitive, so sign-in must not reveal whether an email is invited.
+  // There is deliberately no per-account lockout: its distinct answer revealed which emails have
+  // an account, and it let anyone keep a member locked out. The per-email and per-IP limits above
+  // are the brute-force protection (users.failed_login_count / locked_until are no longer used).
   const genericFailure = new AppError(
     "UNAUTHENTICATED",
     "Email or password is incorrect. If you were recently invited, please use the activation link in your invitation first.",
@@ -164,28 +181,10 @@ export async function authenticate(email: string, password: string, meta: Reques
   const user = await db.user.findUnique({ where: { email } });
 
   if (!user || !user.passwordHash) {
-    await verifyPassword(await getDummyHash(), password);
+    await verifyPassword(await getDummyHash(), password); // same timing as a wrong password
     throw genericFailure;
   }
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    throw new AppError("RATE_LIMITED", "This account is temporarily locked after several failed attempts. Try again in 15 minutes or reset your password.");
-  }
-
-  const ok = await verifyPassword(user.passwordHash, password);
-  if (!ok) {
-    const failed = user.failedLoginCount + 1;
-    await db.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginCount: failed >= MAX_FAILED_LOGINS ? 0 : failed,
-        lockedUntil: failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCKOUT_MS) : user.lockedUntil,
-      },
-    });
-    if (failed >= MAX_FAILED_LOGINS) {
-      await recordAudit({ userId: user.id, ...meta }, { action: "auth.locked", entityType: "user", entityId: user.id });
-    }
-    throw genericFailure;
-  }
+  if (!(await verifyPassword(user.passwordHash, password))) throw genericFailure;
   if (user.status === "DISABLED") {
     throw new AppError("FORBIDDEN", "This account is disabled. Please contact CLUB JOIA concierge.");
   }
@@ -195,6 +194,7 @@ export async function authenticate(email: string, password: string, meta: Reques
 
   await db.user.update({
     where: { id: user.id },
+    // Also clears values left by the former account lockout.
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
   });
   const session = await createSession(user.id, user.role, meta);
@@ -260,7 +260,8 @@ export async function issueActivation(userId: string) {
 export const TERMS_VERSION = "2026-10-draft";
 
 export async function activateAccount(token: string, password: string, meta: RequestMeta) {
-  await enforceRateLimit(`activate:ip:${meta.ipAddress ?? "unknown"}`, RATE_LIMITS.activationPerIp.limit, RATE_LIMITS.activationPerIp.window);
+  // Activation tokens are 256-bit, so the per-IP limit is the only (and enough) guard here.
+  await enforcePerIpLimit("activate", meta, RATE_LIMITS.activationPerIp);
   const user = await consumeAuthToken(token, "ACTIVATION");
   const passwordHash = await hashPassword(password);
   await db.$transaction(async (tx) => {
@@ -288,8 +289,9 @@ export async function activateAccount(token: string, password: string, meta: Req
   return { ...session, role: user.role };
 }
 
-export async function requestPasswordReset(email: string, meta: RequestMeta) {
-  await enforceRateLimit(`reset:ip:${meta.ipAddress ?? "unknown"}`, RATE_LIMITS.passwordResetPerIp.limit, RATE_LIMITS.passwordResetPerIp.window);
+export async function requestPasswordReset(rawEmail: string, meta: RequestMeta) {
+  const email = normaliseEmail(rawEmail);
+  await enforcePerIpLimit("reset", meta, RATE_LIMITS.passwordResetPerIp);
   const { allowed } = await hitRateLimit(
     `reset:email:${email}`,
     RATE_LIMITS.passwordResetPerEmail.limit,

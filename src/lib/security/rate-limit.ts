@@ -38,6 +38,22 @@ export async function enforceRateLimit(key: string, limit: number, windowSeconds
   }
 }
 
+/**
+ * Gives back one hit taken by hitRateLimit, for limits that should only count failures but must
+ * reserve the attempt up front (so parallel attempts can't all slip past the check; see MFA).
+ */
+export async function releaseRateLimitHit(key: string) {
+  await db.$executeRaw`UPDATE \`rate_limit_buckets\` SET \`count\` = GREATEST(\`count\` - 1, 0) WHERE \`key\` = ${sha256(key)}`;
+}
+
+/** Longest window in use is 24 h; older buckets are dead weight. Called by the cron route. */
+export const RATE_LIMIT_RETENTION_SECONDS = 2 * 24 * 60 * 60;
+
+/** Deletes buckets whose window started more than two days ago. Returns how many were removed. */
+export async function pruneRateLimitBuckets(): Promise<number> {
+  return db.$executeRaw`DELETE FROM \`rate_limit_buckets\` WHERE \`window_start\` < UTC_TIMESTAMP(3) - INTERVAL ${RATE_LIMIT_RETENTION_SECONDS} SECOND`;
+}
+
 export const RATE_LIMITS = {
   loginPerEmail: { limit: 8, window: 15 * 60 },
   loginPerIp: { limit: 40, window: 15 * 60 },
