@@ -38,7 +38,7 @@ src/services/*.service.ts  ── ALL business rules + permission checks + audit
 
 ### Rendering model
 
-Next.js 16 **Cache Components** is enabled. Layouts are static shells (brand chrome, navigation). Anything that reads the session sits inside `<Suspense>` and streams in with a skeleton loader. Personal data is never put into a shared cache.
+Every page is rendered per request (the root layout awaits `connection()`; Cache Components is off), so it can carry the request's script nonce: the Content-Security-Policy (`src/lib/security/csp.ts`, set by `src/proxy.ts`) runs no inline script without it. Anything that reads the session sits inside `<Suspense>` and streams in with a skeleton loader. Personal data is never put into a shared cache.
 
 ## 2. User roles
 
@@ -164,7 +164,7 @@ Scheduled notifications are processed by `/api/cron/notifications`. System event
 
 - Server-side authorisation everywhere. Zod validation on every input. Prisma parameterisation, plus two raw queries (rate limiter, next membership number) using tagged parameters.
 - Uploads are checked by magic bytes and size (no SVG), stored under random keys, and served only through `/api/files/*` after an ownership/role check, with a sandboxed CSP.
-- Security headers: CSP (`frame-ancestors 'none'`, own-origin only), HSTS on HTTPS, `nosniff`, `Referrer-Policy: no-referrer`, and a Permissions-Policy allowing only the camera.
+- Security headers: CSP (per-request nonce for scripts, no `'unsafe-inline'` scripts, `frame-ancestors 'none'`, own-origin only; `src/proxy.ts`), HSTS on HTTPS, `nosniff`, `Referrer-Policy: no-referrer`, and a Permissions-Policy allowing only the camera.
 - **GDPR:** consent records (terms, privacy, marketing, push), JSON data export, member-initiated deletion request, and admin **anonymisation**. Anonymisation erases PII but keeps tickets, scans and audit rows against an anonymous record.
 - Audit log: `audit_logs` is protected by MySQL triggers that reject UPDATE and DELETE. MySQL triggers cannot stop `TRUNCATE` (which needs the DROP privilege), so the production runtime user must not hold DROP, ALTER or TRIGGER (see Deployment in the README). Secrets are redacted from snapshots.
 - Errors: users see polite messages. Unexpected errors carry a reference (`ERR-…`, or the Next.js digest), and admin error pages show it for diagnosis. Stack traces never reach the client.

@@ -144,7 +144,7 @@ Any Linux server with Node.js 20.19+ (22 LTS recommended) and MySQL 8, with the 
 7. **Scheduled notifications:** call `GET /api/cron/notifications` every minute with `Authorization: Bearer $CRON_SECRET`, e.g. `curl -fsS -H "Authorization: Bearer …" http://127.0.0.1:3000/api/cron/notifications`.
 8. First admin: `npm run admin:create -- you@example.com "Your Name"` (see above). Never run `npm run db:seed` in production.
 
-Security headers (CSP, HSTS on https, frame denial, Permissions-Policy allowing only the camera) are set in `next.config.ts`.
+Security headers (HSTS on https, frame denial, Permissions-Policy allowing only the camera) are set in `next.config.ts`; the CSP, with a fresh script nonce per request (no inline script runs without it), in `src/proxy.ts` (`src/lib/security/csp.ts`).
 
 ## Remaining production items
 

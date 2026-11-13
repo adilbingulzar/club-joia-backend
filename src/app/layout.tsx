@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
 import { Cormorant_Garamond, Inter_Tight } from "next/font/google";
 import { themeColor } from "@/styles/design-tokens";
 import { ServiceWorkerRegistrar } from "@/components/pwa/service-worker-registrar";
@@ -40,7 +41,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Every page is rendered per request: that is what puts the request's nonce on Next.js's scripts
+  // (Content-Security-Policy, src/lib/security/csp.ts). A page built ahead of time would have none.
+  await connection();
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body>
