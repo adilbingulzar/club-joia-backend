@@ -45,6 +45,9 @@ const schema = z.object({
 
   CRON_SECRET: z.string().min(16).optional(),
 
+  /** API key of the scanner API (X-Api-Key header, src/app/api/scan). Unset or empty: the API answers 503. */
+  SCAN_API_KEY: z.string().optional(),
+
   /**
    * Encrypts the authenticator-app secrets of admin accounts (MFA). At least 32 characters, e.g.
    * `openssl rand -base64 32`. club-joia-300-next must have the same value. Admins can't sign in
