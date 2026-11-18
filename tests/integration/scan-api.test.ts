@@ -56,7 +56,7 @@ describe("scanner API", () => {
       ticketId: sat.ticketNumber,
       name: "Marcus Vale",
       email: EMAILS.marcus,
-      phone: expect.anything(),
+      phone: (await db.member.findUniqueOrThrow({ where: { id: sat.memberId } })).mobile,
       type: "SAT",
       typeName: "Saturday Access",
       tier: "Ultra Black",
