@@ -160,24 +160,6 @@ describe("sales on the website's orders", () => {
     expect(declined).toMatchObject({ error: "card refused", member: null, ticketList: [] });
   });
 
-  it("shows the ad campaign of an order, and none before the website added the column", async () => {
-    expect((await getSalesOrder(admin, "CJ-T-0001"))!.campaign).toEqual([]);
-    await db.$executeRawUnsafe("ALTER TABLE shop_orders ADD COLUMN attribution JSON NULL");
-    await db.$executeRawUnsafe(
-      "UPDATE shop_orders SET attribution = ? WHERE ref = 'CJ-T-0001'",
-      JSON.stringify({ utm_source: "facebook", utm_campaign: "gp-2026", fbclid: "IwAR0abc", landing: "/", referrer: "https://l.facebook.com/l.php", at: "2026-11-18T10:00:00.000Z", junk: "x" }),
-    );
-    expect((await getSalesOrder(admin, "CJ-T-0001"))!.campaign).toEqual([
-      ["Source", "facebook"],
-      ["Campaign", "gp-2026"],
-      ["Meta click id", "IwAR0abc"],
-      ["Landing page", "/"],
-      ["Came from", "https://l.facebook.com/l.php"],
-      ["Ad visit", "2026-11-18T10:00:00.000Z"],
-    ]);
-    expect((await getSalesOrder(admin, "CJ-T-0003"))!.campaign).toEqual([]);
-  });
-
   it("shows and finds the agency code of an order, and none before the website added the column", async () => {
     expect((await getSalesOrder(admin, "CJ-T-0001"))!.agencyCode).toBeNull();
     expect((await listSalesOrders(admin, { ...NO_FILTER, q: "agency" })).total).toBe(0);

@@ -21,7 +21,7 @@ export const PROGRAM_VISIBILITIES = ["DRAFT", "MEMBERS", "RESTRICTED"] as const;
 export const ENTRY_POLICIES = ["SINGLE_ENTRY", "DAILY_ENTRY", "MULTI_ENTRY"] as const;
 export const NOTIFICATION_TYPES = ["ANNOUNCEMENT", "PROGRAMME", "TICKET", "CONCIERGE", "TRANSPORT", "MEMBERSHIP", "SYSTEM"] as const;
 export const TARGET_TYPES = ["ALL_MEMBERS", "TIER", "EVENT", "MEMBER"] as const;
-export const STAFF_ROLE_VALUES = ["CONCIERGE", "CHECK_IN_STAFF", "ADMIN", "SUPER_ADMIN"] as const;
+export const STAFF_ROLE_VALUES = ["CONCIERGE", "CHECK_IN_STAFF", "SALES_VIEWER", "ADMIN", "SUPER_ADMIN"] as const;
 
 export const assignMembershipSchema = z.object({
   memberId: z.string().min(1),

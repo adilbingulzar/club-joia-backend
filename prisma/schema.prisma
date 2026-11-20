@@ -32,6 +32,7 @@ enum Role {
   CHECK_IN_STAFF
   ADMIN
   SUPER_ADMIN
+  SALES_VIEWER
 }
 
 enum UserStatus {

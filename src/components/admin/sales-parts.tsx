@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/joia/badges";
 import { change, orderStatus } from "@/lib/sales/format";
 import { cn } from "@/lib/utils";
 
-export function SalesTabs({ active }: { active: "sales" | "registrations" }) {
+export function SalesTabs({ active }: { active: "sales" | "registrations" | "visits" }) {
   const tab = (href: string, label: string, on: boolean) => (
     <Link
       href={href}
@@ -15,9 +15,10 @@ export function SalesTabs({ active }: { active: "sales" | "registrations" }) {
     </Link>
   );
   return (
-    <nav aria-label="Sales" className="mb-6 flex gap-2">
+    <nav aria-label="Sales" className="mb-6 flex flex-wrap gap-2">
       {tab("/admin/sales", "Ticket sales", active === "sales")}
       {tab("/admin/sales/registrations", "Pre-registrations", active === "registrations")}
+      {tab("/admin/sales/visits", "Website visits", active === "visits")}
     </nav>
   );
 }

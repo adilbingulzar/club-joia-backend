@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can } from "@/lib/auth/permissions";
+import { can, homePathFor, mfaRequired, PERMISSIONS, STAFF_ROLES } from "@/lib/auth/permissions";
 import { ordersCsv, registrationsCsv } from "@/lib/sales/csv";
 import { previousPeriod, readSalesFilters, salesQuery } from "@/lib/sales/filters";
 import { change, compact, percent } from "@/lib/sales/format";
@@ -13,6 +13,18 @@ describe("sales access", () => {
     expect(can("ADMIN", "sales:view")).toBe(true);
     expect(can("SUPER_ADMIN", "sales:view")).toBe(true);
     for (const role of ["MEMBER", "CHECK_IN_STAFF", "CONCIERGE"] as const) expect(can(role, "sales:view")).toBe(false);
+  });
+
+  it("the sales viewer only sees the sales pages, without downloads", () => {
+    expect(can("SALES_VIEWER", "admin:access")).toBe(true);
+    expect(can("SALES_VIEWER", "sales:view")).toBe(true);
+    expect(can("SALES_VIEWER", "sales:export")).toBe(false);
+    expect(can("ADMIN", "sales:export")).toBe(true);
+    expect(can("SUPER_ADMIN", "sales:export")).toBe(true);
+    for (const p of PERMISSIONS.filter((x) => x !== "sales:view" && x !== "admin:access")) expect(can("SALES_VIEWER", p)).toBe(false);
+    expect(homePathFor("SALES_VIEWER")).toBe("/admin/sales");
+    expect(mfaRequired("SALES_VIEWER")).toBe(true);
+    expect(STAFF_ROLES).toContain("SALES_VIEWER");
   });
 });
 

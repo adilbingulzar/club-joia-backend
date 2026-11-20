@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Download } from "lucide-react";
 import { requirePermissionPage } from "@/lib/auth/dal";
+import { can } from "@/lib/auth/permissions";
 import { listPreRegistrations } from "@/services/sales.service";
 import { AdminDataTable, AdminPageHeader } from "@/components/admin/admin-data-table";
 import { SalesTabs } from "@/components/admin/sales-parts";
@@ -36,9 +37,11 @@ async function Registrations({ searchParams }: { searchParams: Promise<SP> }) {
         title="Pre-registrations"
         description={count(data.total) + " in total" + tiers + " · read only"}
         actions={
-          <a href={"/admin/sales/registrations/export" + (q ? "?q=" + encodeURIComponent(q) : "")} download className={buttonClasses("outline", "sm")}>
-            <Download className="size-4" aria-hidden /> Download CSV
-          </a>
+          can(actor.role, "sales:export") && (
+            <a href={"/admin/sales/registrations/export" + (q ? "?q=" + encodeURIComponent(q) : "")} download className={buttonClasses("outline", "sm")}>
+              <Download className="size-4" aria-hidden /> Download CSV
+            </a>
+          )
         }
       />
       <SalesTabs active="registrations" />

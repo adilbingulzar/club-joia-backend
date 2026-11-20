@@ -341,40 +341,7 @@ export type SalesOrderDetail = SalesOrderRow & {
   payment: { id: string | null; status: string | null };
   member: { id: string; number: string; email: string; account: string; tier: string | null; membership: string | null } | null;
   ticketList: { number: string; code: string; name: string; status: string }[];
-  /** The ad campaign the buyer came from (utm tags, click ids, landing page, referrer), as label and value. */
-  campaign: [string, string][];
 };
-
-// the website's names for the campaign fields (club-joia-300-next lib/attribution.ts), in order
-const CAMPAIGN_FIELDS: [string, string][] = [
-  ["utm_source", "Source"],
-  ["utm_medium", "Medium"],
-  ["utm_campaign", "Campaign"],
-  ["utm_term", "Term"],
-  ["utm_content", "Content"],
-  ["fbclid", "Meta click id"],
-  ["gclid", "Google click id"],
-  ["ttclid", "TikTok click id"],
-  ["li_fat_id", "LinkedIn click id"],
-  ["landing", "Landing page"],
-  ["referrer", "Came from"],
-  ["at", "Ad visit"],
-];
-
-/** The order's campaign; none when the website hasn't added the column yet (an older deploy). */
-async function orderCampaign(ref: string): Promise<[string, string][]> {
-  let raw: unknown;
-  try {
-    raw = (await query("SELECT attribution FROM shop_orders WHERE ref = ?", [ref]))[0]?.attribution;
-  } catch (e) {
-    if (/Unknown column|1054/i.test(String((e as Error)?.message ?? e))) return [];
-    throw e;
-  }
-  const a = json<Record<string, unknown>>(raw, {});
-  return CAMPAIGN_FIELDS.flatMap(([k, label]): [string, string][] =>
-    typeof a[k] === "string" && a[k] ? [[label, String(a[k]).slice(0, 300)]] : [],
-  );
-}
 
 /** One order: buyer, tickets bought and issued, payment and the member it made. */
 export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrderDetail | null> {
@@ -391,7 +358,7 @@ export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrd
   const buyer = json<Record<string, string>>(o.buyer, {});
   const numbers = json<string[]>(o.tickets, []).filter((x) => typeof x === "string");
 
-  const [member, tickets, campaign] = await Promise.all([
+  const [member, tickets] = await Promise.all([
     o.member_id
       ? db.member.findUnique({
           where: { id: String(o.member_id) },
@@ -410,7 +377,6 @@ export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrd
           select: { ticketNumber: true, status: true, ticketType: { select: { code: true, name: true } } },
         })
       : [],
-    orderCampaign(String(o.ref)),
   ]);
 
   return {
@@ -437,7 +403,6 @@ export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrd
         }
       : null,
     ticketList: tickets.map((t) => ({ number: t.ticketNumber, code: t.ticketType.code, name: t.ticketType.name, status: t.status })),
-    campaign,
   };
 }
 
@@ -494,6 +459,7 @@ export async function listPreRegistrations(actor: Actor, q = ""): Promise<{ avai
 
 /** The orders matching the filters for a CSV download (up to 10,000), noted in the audit log: it holds buyers' details. */
 export async function exportSalesOrders(actor: Actor, f: SalesFilterInput): Promise<SalesOrderRow[]> {
+  requirePermission(actor, "sales:export");
   const list = await listSalesOrders(actor, f, 1, 10000);
   await recordAudit(actor, { action: "sales.orders_exported", entityType: "shop_order", after: { rows: list.orders.length, filters: f } });
   return list.orders;
@@ -501,6 +467,7 @@ export async function exportSalesOrders(actor: Actor, f: SalesFilterInput): Prom
 
 /** The pre-registrations for a CSV download, noted in the audit log. */
 export async function exportPreRegistrations(actor: Actor, q = ""): Promise<PreRegistration[]> {
+  requirePermission(actor, "sales:export");
   const data = await listPreRegistrations(actor, q);
   await recordAudit(actor, { action: "sales.registrations_exported", entityType: "pre_registration", after: { rows: data.registrations.length, q: q || null } });
   return data.registrations;

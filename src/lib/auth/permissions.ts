@@ -31,6 +31,7 @@ export const PERMISSIONS = [
   "notifications:send",
   "dashboard:view",
   "sales:view",
+  "sales:export",
   "audit:view",
   "staff:manage",
   "settings:manage",
@@ -72,10 +73,15 @@ const ADMIN: Permission[] = [
   "scans:view",
   "notifications:send",
   "dashboard:view",
-  // the website's ticket sales and pre-registrations (src/services/sales.service.ts)
+  // the website's ticket sales, pre-registrations and visits (src/services/sales.service.ts, visits.service.ts)
   "sales:view",
+  // their CSV downloads (buyers' and pre-registrations' personal details)
+  "sales:export",
   "audit:view",
 ];
+
+// sees the website's sales, pre-registrations and visits in the admin, nothing else; no downloads
+const SALES_VIEWER: Permission[] = ["sales:view", "admin:access"];
 
 const SUPER_ADMIN: Permission[] = [...ADMIN, "staff:manage", "settings:manage", "events:manage"];
 
@@ -85,13 +91,14 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   CONCIERGE: new Set(CONCIERGE),
   ADMIN: new Set(ADMIN),
   SUPER_ADMIN: new Set(SUPER_ADMIN),
+  SALES_VIEWER: new Set(SALES_VIEWER),
 };
 
 export function can(role: Role, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].has(permission);
 }
 
-export const STAFF_ROLES: Role[] = ["CONCIERGE", "CHECK_IN_STAFF", "ADMIN", "SUPER_ADMIN"];
+export const STAFF_ROLES: Role[] = ["CONCIERGE", "CHECK_IN_STAFF", "SALES_VIEWER", "ADMIN", "SUPER_ADMIN"];
 
 export function isStaff(role: Role): boolean {
   return role !== "MEMBER";
@@ -99,7 +106,8 @@ export function isStaff(role: Role): boolean {
 
 /** Roles that must confirm an authenticator code after their password (docs/ARCHITECTURE.md#mfa). */
 export function mfaRequired(role: Role): boolean {
-  return role === "ADMIN" || role === "SUPER_ADMIN";
+  // the sales viewer sees buyers' names, emails and phone numbers
+  return role === "ADMIN" || role === "SUPER_ADMIN" || role === "SALES_VIEWER";
 }
 
 /** Where a user lands after signing in. */
@@ -111,6 +119,8 @@ export function homePathFor(role: Role): string {
       return "/staff/scanner";
     case "CONCIERGE":
       return "/admin/concierge";
+    case "SALES_VIEWER":
+      return "/admin/sales";
     default:
       return "/admin";
   }
@@ -122,4 +132,5 @@ export const ROLE_LABELS: Record<Role, string> = {
   CHECK_IN_STAFF: "Check-in staff",
   ADMIN: "Admin",
   SUPER_ADMIN: "Super admin",
+  SALES_VIEWER: "Sales viewer",
 };

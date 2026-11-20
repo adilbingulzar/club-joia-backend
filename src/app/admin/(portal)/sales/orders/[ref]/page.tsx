@@ -155,13 +155,6 @@ async function Order({ params }: Pick<PageProps<"/admin/sales/orders/[ref]">, "p
             <Empty>{o.status === "paid" ? "None issued yet." : "Issued once the order is paid."}</Empty>
           )}
         </AdminCard>
-        <AdminCard title="Ad campaign" className="lg:col-span-2">
-          {o.campaign.length ? (
-            <Fields rows={o.campaign.map(([k, v]) => [k, k === "Ad visit" ? dateTime(new Date(v)) : <span key={k} className="break-all">{v}</span>])} />
-          ) : (
-            <Empty>The buyer didn&apos;t come from a tagged ad link.</Empty>
-          )}
-        </AdminCard>
       </div>
     </>
   );

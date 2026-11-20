@@ -6,7 +6,7 @@ import { ROLE_LABELS } from "@/lib/auth/permissions";
 import type { Role } from "@/generated/prisma/enums";
 import { changeRoleAction } from "../actions";
 
-const ROLES: Role[] = ["CONCIERGE", "CHECK_IN_STAFF", "ADMIN", "SUPER_ADMIN"];
+const ROLES: Role[] = ["CONCIERGE", "CHECK_IN_STAFF", "SALES_VIEWER", "ADMIN", "SUPER_ADMIN"];
 
 export function RoleSelect({ userId, role }: { userId: string; role: Role }) {
   const [pending, start] = useTransition();

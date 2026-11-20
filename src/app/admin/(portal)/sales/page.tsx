@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Download } from "lucide-react";
 import { requirePermissionPage } from "@/lib/auth/dal";
+import { can } from "@/lib/auth/permissions";
 import { getSalesStats, listSalesOrders } from "@/services/sales.service";
 import { AdminCard, AdminDataTable, AdminPageHeader } from "@/components/admin/admin-data-table";
 import { BarList, ColumnChart, SegmentedBar } from "@/components/admin/sales-charts";
@@ -168,9 +169,11 @@ async function Sales({ searchParams }: { searchParams: Promise<SP> }) {
         title="Ticket sales"
         description={rangeText(f) + " · days and times in Dubai time (GST) · read only"}
         actions={
-          <a href={"/admin/sales/export" + salesQuery(f, { page: 1 })} download className={buttonClasses("outline", "sm")}>
-            <Download className="size-4" aria-hidden /> Export CSV
-          </a>
+          can(actor.role, "sales:export") && (
+            <a href={"/admin/sales/export" + salesQuery(f, { page: 1 })} download className={buttonClasses("outline", "sm")}>
+              <Download className="size-4" aria-hidden /> Export CSV
+            </a>
+          )
         }
       />
       <SalesTabs active="sales" />

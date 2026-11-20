@@ -63,7 +63,7 @@ async function Staff({ searchParams }: { searchParams: Promise<SP> }) {
   const whatsappOn = whatsappDeliveryConfigured();
   return (
     <>
-      <AdminPageHeader eyebrow="Security" title="Staff" description="Role changes sign the person out everywhere so new permissions apply immediately. Staff sessions last 12 hours. Staff sign in at /admin/login. Admins and super admins also enter a code from an authenticator app; resetting it makes them set it up again at their next sign-in." />
+      <AdminPageHeader eyebrow="Security" title="Staff" description="Role changes sign the person out everywhere so new permissions apply immediately. Staff sessions last 12 hours. Staff sign in at /admin/login. Admins, super admins and sales viewers also enter a code from an authenticator app; resetting it makes them set it up again at their next sign-in." />
       {(!emailOn || !whatsappOn) && (
         <div className="mb-6">
           <Notice tone="light" title="Alert delivery not fully configured">

@@ -42,6 +42,7 @@ import {
   staffConciergeUpdateSchema,
   staffContactSchema,
   staffSchema,
+  STAFF_ROLE_VALUES,
   ticketTypeSchema,
   tierSchema,
   zoneSchema,
@@ -364,7 +365,7 @@ export async function updateStaffContactAction(_p: AdminFormState, form: FormDat
 }
 
 export async function changeRoleAction(userId: string, role: string) {
-  return authedAction(z.object({ userId: id, role: z.enum(["CONCIERGE", "CHECK_IN_STAFF", "ADMIN", "SUPER_ADMIN"]) }), { userId, role }, async (actor, d) => {
+  return authedAction(z.object({ userId: id, role: z.enum(STAFF_ROLE_VALUES) }), { userId, role }, async (actor, d) => {
     await changeRole(actor, d.userId, d.role);
     revalidatePath("/admin/staff");
   });
