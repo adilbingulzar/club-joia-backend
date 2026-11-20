@@ -121,10 +121,9 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
         </div>
       </form>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Kpi label="Visitors" value={count(t.visitors)} note="one person counted once a day" lead />
         <Kpi label="Page views" value={count(t.pageViews)} />
-        <Kpi label="Pages per visitor" value={t.visitors ? (t.pageViews / t.visitors).toLocaleString("en-US", { maximumFractionDigits: 1 }) : "0"} />
         <Kpi label="Visitors today" value={count(visitorsToday ?? 0)} note={dayLabel(today(), true)} />
       </div>
 

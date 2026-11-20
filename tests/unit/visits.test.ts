@@ -9,6 +9,8 @@ describe("website visits report", () => {
     expect(pageLabel("/preregister")).toBe("Pre-registration");
     expect(pageLabel("/new-page")).toBe("/new-page");
     expect(sourceLabel("linkedin")).toBe("LinkedIn");
+    expect(sourceLabel("ig")).toBe("Instagram (paid ad)");
+    expect(sourceLabel("an")).toBe("Meta paid ad in other apps and sites");
     expect(sourceLabel("news.example.org")).toBe("news.example.org");
   });
 

@@ -39,6 +39,12 @@ const SOURCES: Record<string, string> = {
   x: "X (Twitter)",
   whatsapp: "WhatsApp",
   snapchat: "Snapchat",
+  // Meta ads fill utm_source with where the ad was shown ({{site_source_name}})
+  ig: "Instagram (paid ad)",
+  fb: "Facebook (paid ad)",
+  an: "Meta paid ad in other apps and sites",
+  msg: "Messenger (paid ad)",
+  th: "Threads (paid ad)",
 };
 
 export function sourceLabel(source: string): string {
