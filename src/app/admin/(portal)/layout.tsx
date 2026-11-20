@@ -23,7 +23,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Suspense>
         </div>
       </aside>
-      <div className="min-w-0">
+      {/* light working canvas: the site is dark (color-scheme in app/layout.tsx), which drew the date pickers' calendar icons white on white */}
+      <div className="min-w-0 [color-scheme:light]">
         <header className="flex h-14 items-center justify-end gap-4 border-b border-black/8 bg-white/70 px-6 backdrop-blur">
           <Suspense fallback={<div className="skeleton h-6 w-40" aria-hidden />}>
             <AdminIdentity />
