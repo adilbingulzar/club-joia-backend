@@ -6,7 +6,7 @@ import { recordAudit } from "./audit.service";
 import { requirePermission, type Actor } from "./context";
 
 /**
- * VisitsService — the website's page views, read only, for /admin/sales/visits.
+ * VisitsService — the website's page views, read only, for /admin/visits.
  *
  * The website (club-joia-300-next lib/visits.ts) saves one row per page view in `shop_visits`, in
  * this same database: the day (UAE date, as SHOP_TIMEZONE), an anonymous visitor code that changes
@@ -63,7 +63,7 @@ export type VisitStats = {
 const EMPTY: VisitStats = { available: false, totals: { visitors: 0, pageViews: 0 }, byDay: [], bySource: [], byPage: [] };
 
 export async function getVisitStats(actor: Actor, r: VisitRange): Promise<VisitStats> {
-  requirePermission(actor, "sales:view");
+  requirePermission(actor, "visits:view");
   const w = where(r);
   const wv = where(r, "v.");
   let days: Row[], sources: Row[], pages: Row[];
@@ -109,7 +109,7 @@ export type DayVisitor = {
 
 /** One day's visitors: where each came from and which pages they opened how often, latest first. */
 export async function listDayVisitors(actor: Actor, day: string, limit = 200): Promise<{ available: boolean; total: number; visitors: DayVisitor[] }> {
-  requirePermission(actor, "sales:view");
+  requirePermission(actor, "visits:view");
   if (!isDay(day)) return { available: true, total: 0, visitors: [] };
   let rows: Row[], sources: Row[];
   try {

@@ -32,6 +32,7 @@ export const PERMISSIONS = [
   "dashboard:view",
   "sales:view",
   "sales:export",
+  "visits:view",
   "audit:view",
   "staff:manage",
   "settings:manage",
@@ -73,15 +74,17 @@ const ADMIN: Permission[] = [
   "scans:view",
   "notifications:send",
   "dashboard:view",
-  // the website's ticket sales, pre-registrations and visits (src/services/sales.service.ts, visits.service.ts)
+  // the website's ticket sales and pre-registrations (src/services/sales.service.ts)
   "sales:view",
-  // their CSV downloads (buyers' and pre-registrations' personal details)
+  // the website's visits (src/services/visits.service.ts)
+  "visits:view",
+  // the CSV downloads of sales, pre-registrations and visits (buyers' personal details)
   "sales:export",
   "audit:view",
 ];
 
 // sees the website's sales, pre-registrations and visits in the admin, nothing else; no downloads
-const SALES_VIEWER: Permission[] = ["sales:view", "admin:access"];
+const SALES_VIEWER: Permission[] = ["sales:view", "visits:view", "admin:access"];
 
 const SUPER_ADMIN: Permission[] = [...ADMIN, "staff:manage", "settings:manage", "events:manage"];
 

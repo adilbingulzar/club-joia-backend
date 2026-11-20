@@ -7,7 +7,7 @@ import { can } from "@/lib/auth/permissions";
 import { getVisitStats, listDayVisitors } from "@/services/visits.service";
 import { AdminCard, AdminDataTable, AdminPageHeader } from "@/components/admin/admin-data-table";
 import { BarList, ColumnChart } from "@/components/admin/sales-charts";
-import { Empty, SalesTabs, TableView } from "@/components/admin/sales-parts";
+import { Empty, TableView } from "@/components/admin/sales-parts";
 import { LoadingSkeleton } from "@/components/joia/states";
 import { buttonClasses } from "@/components/ui/button-styles";
 import { isDay, RANGES, readSalesFilters, today, type SalesFilters } from "@/lib/sales/filters";
@@ -17,7 +17,7 @@ import { sp, type SP } from "@/lib/search-params";
 
 export const metadata: Metadata = { title: "Website visits" };
 
-export default function VisitsPage({ searchParams }: PageProps<"/admin/sales/visits">) {
+export default function VisitsPage({ searchParams }: PageProps<"/admin/visits">) {
   return (
     <Suspense fallback={<LoadingSkeleton variant="list" lines={8} />}>
       <Visits searchParams={searchParams} />
@@ -60,7 +60,7 @@ function Kpi({ label, value, note, lead }: { label: string; value: string; note?
 }
 
 async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
-  const actor = await requirePermissionPage("sales:view");
+  const actor = await requirePermissionPage("visits:view");
   const params = await searchParams;
   const f = readSalesFilters(params);
   const asked = (sp(params, "day") ?? "").slice(0, 10);
@@ -79,20 +79,19 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
         description={rangeText(f) + " · days in Dubai time (GST) · bots left out · read only"}
         actions={
           can(actor.role, "sales:export") && (
-            <a href={"/admin/sales/visits/export" + visitsQuery(f)} download className={buttonClasses("outline", "sm")}>
+            <a href={"/admin/visits/export" + visitsQuery(f)} download className={buttonClasses("outline", "sm")}>
               <Download className="size-4" aria-hidden /> Daily report CSV
             </a>
           )
         }
       />
-      <SalesTabs active="visits" />
       {!stats.available && (
         <p className="mb-6 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
           The website&rsquo;s visits table (shop_visits) isn&rsquo;t in this database yet. It is made when the website first counts a visit.
         </p>
       )}
 
-      <form action="/admin/sales/visits" method="get" className="mb-6 flex flex-wrap items-end gap-3" aria-label="Period">
+      <form action="/admin/visits" method="get" className="mb-6 flex flex-wrap items-end gap-3" aria-label="Period">
         <label className={lbl}>
           Period
           <select name="range" defaultValue={f.range} className={field + " min-w-36"}>
@@ -115,7 +114,7 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
         <div className="flex gap-2">
           <button className="h-10 rounded-full bg-ink px-5 text-xs font-medium uppercase tracking-[0.14em] text-pearl hover:bg-black">Apply</button>
           {f.range !== "all" && (
-            <Link href="/admin/sales/visits" className="grid h-10 place-items-center rounded-full px-4 text-xs font-medium uppercase tracking-[0.14em] text-black/55 hover:bg-black/5">
+            <Link href="/admin/visits" className="grid h-10 place-items-center rounded-full px-4 text-xs font-medium uppercase tracking-[0.14em] text-black/55 hover:bg-black/5">
               Reset
             </Link>
           )}
@@ -181,7 +180,7 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
           Visitors on {dayLabel(day, true)} · {count(list.total)} {list.total === 1 ? "visitor" : "visitors"}
           {list.total > list.visitors.length && " · latest " + list.visitors.length + " shown"}
         </h2>
-        <form action="/admin/sales/visits" method="get" className="flex items-end gap-2" aria-label="Day">
+        <form action="/admin/visits" method="get" className="flex items-end gap-2" aria-label="Day">
           {f.range !== "all" && <input type="hidden" name="range" value={f.range} />}
           {f.range === "custom" && f.from && <input type="hidden" name="from" value={f.from} />}
           {f.range === "custom" && f.to && <input type="hidden" name="to" value={f.to} />}

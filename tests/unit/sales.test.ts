@@ -15,13 +15,16 @@ describe("sales access", () => {
     for (const role of ["MEMBER", "CHECK_IN_STAFF", "CONCIERGE"] as const) expect(can(role, "sales:view")).toBe(false);
   });
 
-  it("the sales viewer only sees the sales pages, without downloads", () => {
+  it("the sales viewer only sees the sales and visits pages, without downloads", () => {
     expect(can("SALES_VIEWER", "admin:access")).toBe(true);
     expect(can("SALES_VIEWER", "sales:view")).toBe(true);
     expect(can("SALES_VIEWER", "sales:export")).toBe(false);
     expect(can("ADMIN", "sales:export")).toBe(true);
     expect(can("SUPER_ADMIN", "sales:export")).toBe(true);
-    for (const p of PERMISSIONS.filter((x) => x !== "sales:view" && x !== "admin:access")) expect(can("SALES_VIEWER", p)).toBe(false);
+    expect(can("SALES_VIEWER", "visits:view")).toBe(true);
+    expect(can("ADMIN", "visits:view")).toBe(true);
+    for (const role of ["MEMBER", "CHECK_IN_STAFF", "CONCIERGE"] as const) expect(can(role, "visits:view")).toBe(false);
+    for (const p of PERMISSIONS.filter((x) => !["sales:view", "visits:view", "admin:access"].includes(x))) expect(can("SALES_VIEWER", p)).toBe(false);
     expect(homePathFor("SALES_VIEWER")).toBe("/admin/sales");
     expect(mfaRequired("SALES_VIEWER")).toBe(true);
     expect(STAFF_ROLES).toContain("SALES_VIEWER");

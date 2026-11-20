@@ -1,5 +1,5 @@
 /**
- * The website's visit report (/admin/sales/visits): names for its pages and sources, the days of
+ * The website's visit report (/admin/visits): names for its pages and sources, the days of
  * the chart, and the CSV for the daily report sheet. The figures come from src/services/visits.service.ts.
  */
 import { addDays, daysBetween, today } from "./filters";

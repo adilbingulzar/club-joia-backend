@@ -4,7 +4,7 @@ import { readSalesFilters, today } from "@/lib/sales/filters";
 import { visitsCsv } from "@/lib/sales/visits";
 import { exportVisits } from "@/services/visits.service";
 
-/** The website's daily visit report for the period on /admin/sales/visits, as a CSV file. */
+/** The website's daily visit report for the period on /admin/visits, as a CSV file. */
 export async function GET(request: Request) {
   await connection(); // per-request only; never prerendered
   try {
