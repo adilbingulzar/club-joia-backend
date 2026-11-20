@@ -114,7 +114,7 @@ function Filters({ f, stats }: { f: SalesFilters; stats: SalesStats }) {
       </label>
       <label className={lbl + " min-w-56 flex-1"}>
         Search
-        <input type="search" name="q" defaultValue={f.q} placeholder="Order, name, email or phone" className={field + " w-full"} />
+        <input type="search" name="q" defaultValue={f.q} placeholder="Order, name, email, phone or agency code" className={field + " w-full"} />
       </label>
       <div className="flex gap-2">
         <button className="h-10 rounded-full bg-ink px-5 text-xs font-medium uppercase tracking-[0.14em] text-pearl hover:bg-black">Apply</button>
@@ -336,6 +336,7 @@ async function Sales({ searchParams }: { searchParams: Promise<SP> }) {
             cell: (o) => (
               <span>
                 {itemsText(o.items)}
+                {o.agencyCode && <span className="block text-xs text-black/50">Agency: {o.agencyCode}</span>}
                 {o.error && <span className="block text-xs text-danger">⚠ {o.error}</span>}
               </span>
             ),

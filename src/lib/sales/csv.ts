@@ -13,14 +13,14 @@ function csv(head: string[], rows: (string | number | null | undefined)[][]): st
   return "﻿" + [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
-export const ORDER_COLUMNS = ["Date (Dubai)", "Order", "Status", "Name", "Email", "Phone", "Country", "Tickets", "Quantity", "Amount", "Currency", "Paid at (Dubai)", "Tickets issued", "Note"];
+export const ORDER_COLUMNS = ["Date (Dubai)", "Order", "Status", "Name", "Email", "Phone", "Country", "Tickets", "Quantity", "Amount", "Currency", "Paid at (Dubai)", "Tickets issued", "Agency code", "Note"];
 
 export function ordersCsv(orders: SalesOrderRow[]): string {
   return csv(
     ORDER_COLUMNS,
     orders.map((o) => [
       dateTime(o.createdAt), o.ref, orderStatus(o.status).label, o.buyer.name, o.buyer.email, o.buyer.mobile, o.buyer.country,
-      itemsText(o.items), o.items.reduce((s, i) => s + i.quantity, 0), o.amount, o.currency, dateTime(o.paidAt), o.tickets, o.error,
+      itemsText(o.items), o.items.reduce((s, i) => s + i.quantity, 0), o.amount, o.currency, dateTime(o.paidAt), o.tickets, o.agencyCode, o.error,
     ]),
   );
 }

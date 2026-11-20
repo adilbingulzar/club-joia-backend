@@ -178,6 +178,17 @@ describe("sales on the website's orders", () => {
     expect((await getSalesOrder(admin, "CJ-T-0003"))!.campaign).toEqual([]);
   });
 
+  it("shows and finds the agency code of an order, and none before the website added the column", async () => {
+    expect((await getSalesOrder(admin, "CJ-T-0001"))!.agencyCode).toBeNull();
+    expect((await listSalesOrders(admin, { ...NO_FILTER, q: "agency" })).total).toBe(0);
+    await db.$executeRawUnsafe("ALTER TABLE shop_orders ADD COLUMN agency_code VARCHAR(50) NULL");
+    await db.$executeRawUnsafe("UPDATE shop_orders SET agency_code = 'AGENCY 7' WHERE ref = 'CJ-T-0001'");
+    expect((await getSalesOrder(admin, "CJ-T-0001"))!.agencyCode).toBe("AGENCY 7");
+    expect((await getSalesOrder(admin, "CJ-T-0003"))!.agencyCode).toBeNull();
+    const found = await listSalesOrders(admin, { ...NO_FILTER, q: "agency 7" });
+    expect(found.orders.map((o) => [o.ref, o.agencyCode])).toEqual([["CJ-T-0001", "AGENCY 7"]]);
+  });
+
   it("lists pre-registrations, newest first, with search", async () => {
     const r = await listPreRegistrations(admin);
     expect(r).toMatchObject({ available: true, total: 2, byTier: { "Ruby Red": 1, "Ultra Black": 1 } });

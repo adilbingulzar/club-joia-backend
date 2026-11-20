@@ -45,6 +45,17 @@ async function query(sql: string, params: unknown[] = []): Promise<Row[]> {
   return db.$queryRawUnsafe<Row[]>(sql, ...params);
 }
 
+/** Whether shop_orders has the agency code column yet (the website adds it on start, an older deploy hasn't). */
+let agencyColumn = false;
+async function hasAgencyCode(): Promise<boolean> {
+  if (agencyColumn) return true;
+  const rows = await query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'agency_code' LIMIT 1",
+  );
+  agencyColumn = rows.length > 0;
+  return agencyColumn;
+}
+
 /** A moment as MySQL DATETIME text in UTC (the sessions are UTC, src/lib/db-adapter.ts). */
 function sqlTime(at: Date): string {
   return at.toISOString().replace("T", " ").replace("Z", "");
@@ -87,7 +98,7 @@ const ITEMS =
 export type SalesFilterInput = Pick<SalesFilters, "from" | "to" | "status" | "product" | "tier" | "country" | "q">;
 
 /** SQL conditions on shop_orders o for the filters, and on an item i of it (ticket, tier). */
-function where(f: SalesFilterInput) {
+function where(f: SalesFilterInput, agency = false) {
   const params: unknown[] = [];
   const conds = ["1 = 1"];
   const items: string[] = [];
@@ -125,9 +136,11 @@ function where(f: SalesFilterInput) {
   if (q) {
     const like = "%" + q.toLowerCase().replace(/[\\%_]/g, (c) => "\\" + c) + "%";
     conds.push(
-      "(LOWER(o.ref) LIKE ? OR o.email LIKE ? OR LOWER(CONCAT(o.buyer->>'$.firstName', ' ', o.buyer->>'$.lastName')) LIKE ? OR o.buyer->>'$.mobile' LIKE ?)",
+      "(LOWER(o.ref) LIKE ? OR o.email LIKE ? OR LOWER(CONCAT(o.buyer->>'$.firstName', ' ', o.buyer->>'$.lastName')) LIKE ? OR o.buyer->>'$.mobile' LIKE ?" +
+        (agency ? " OR LOWER(o.agency_code) LIKE ?" : "") + ")",
     );
     params.push(like, like, like, like);
+    if (agency) params.push(like);
   }
   return { sql: "WHERE " + conds.join(" AND "), params, items: items.length ? " AND " + items.join(" AND ") : "", itemParams };
 }
@@ -165,7 +178,7 @@ function emptyStats(available: boolean, tiers: { slug: string; displayName: stri
 export async function getSalesStats(actor: Actor, f: SalesFilterInput): Promise<SalesStats> {
   requirePermission(actor, "sales:view");
   const tiers = await db.membershipTier.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, select: { slug: true, displayName: true, cardTheme: true } });
-  const w = where(f);
+  const w = where(f, await hasAgencyCode());
   const paidItems = `FROM shop_orders o, ${ITEMS} ${w.sql} AND o.status = 'paid'${w.items}`;
   const paidParams = [...w.params, ...w.itemParams];
 
@@ -274,6 +287,8 @@ export type SalesOrderRow = {
   currency: string;
   tickets: number;
   error: string | null;
+  /** The agency (seller) code the buyer entered on the order page; null when none. */
+  agencyCode: string | null;
 };
 
 function orderRow(o: Row): SalesOrderRow {
@@ -290,21 +305,27 @@ function orderRow(o: Row): SalesOrderRow {
     currency: String(o.currency || CURRENCY),
     tickets: json<string[]>(o.tickets, []).length,
     error: o.error ? String(o.error) : null,
+    agencyCode: o.agency_code ? String(o.agency_code) : null,
   };
 }
 
-const LIST_COLUMNS = "o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at";
+const BASE_COLUMNS = "o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at";
+async function listColumns(): Promise<string> {
+  return BASE_COLUMNS + ((await hasAgencyCode()) ? ", o.agency_code" : "");
+}
 
 /** The orders matching the filters, newest first (up to 10,000 a page, for the CSV). */
 export async function listSalesOrders(actor: Actor, f: SalesFilterInput, page = 1, perPage = 25): Promise<{ total: number; page: number; perPage: number; orders: SalesOrderRow[] }> {
   requirePermission(actor, "sales:view");
   const size = Math.min(Math.max(Math.floor(perPage) || 25, 1), 10000);
   const p = Math.max(Math.floor(page) || 1, 1);
-  const w = where(f);
+  const agency = await hasAgencyCode();
+  const w = where(f, agency);
+  const columns = await listColumns();
   try {
     const [count, rows] = await Promise.all([
       query(`SELECT COUNT(*) AS n FROM shop_orders o ${w.sql}`, w.params),
-      query(`SELECT ${LIST_COLUMNS} FROM shop_orders o ${w.sql} ORDER BY o.created_at DESC, o.id DESC LIMIT ${size} OFFSET ${(p - 1) * size}`, w.params),
+      query(`SELECT ${columns} FROM shop_orders o ${w.sql} ORDER BY o.created_at DESC, o.id DESC LIMIT ${size} OFFSET ${(p - 1) * size}`, w.params),
     ]);
     return { total: num(count[0]?.n), page: p, perPage: size, orders: rows.map(orderRow) };
   } catch (e) {
@@ -360,7 +381,7 @@ export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrd
   requirePermission(actor, "sales:view");
   let o: Row | undefined;
   try {
-    o = (await query(`SELECT ${LIST_COLUMNS}, o.member_id, o.pay_id, o.pay_status, o.fulfilled_at, o.updated_at FROM shop_orders o WHERE o.ref = ?`, [ref.slice(0, 64)]))[0];
+    o = (await query(`SELECT ${await listColumns()}, o.member_id, o.pay_id, o.pay_status, o.fulfilled_at, o.updated_at FROM shop_orders o WHERE o.ref = ?`, [ref.slice(0, 64)]))[0];
   } catch (e) {
     if (missingTable(e)) return null;
     throw e;

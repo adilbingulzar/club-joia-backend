@@ -73,6 +73,7 @@ async function Order({ params }: Pick<PageProps<"/admin/sales/orders/[ref]">, "p
               ["Ordered", dateTime(o.createdAt)],
               ["Paid", o.paidAt ? dateTime(o.paidAt) : "—"],
               ["Tickets issued", o.fulfilledAt ? dateTime(o.fulfilledAt) : "—"],
+              ["Agency code", o.agencyCode ?? "—"],
             ]}
           />
         </AdminCard>
