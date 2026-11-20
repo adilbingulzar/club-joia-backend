@@ -107,10 +107,10 @@ export type DayVisitor = {
   last: Date;
 };
 
-/** One day's visitors: where each came from and which pages they opened how often, latest first. */
-export async function listDayVisitors(actor: Actor, day: string, limit = 200): Promise<{ available: boolean; total: number; visitors: DayVisitor[] }> {
+/** One day's visitors: where each came from and which pages they opened how often, latest first, a page at a time. */
+export async function listDayVisitors(actor: Actor, day: string, page = 1, pageSize = 25): Promise<{ available: boolean; total: number; page: number; visitors: DayVisitor[] }> {
   requirePermission(actor, "visits:view");
-  if (!isDay(day)) return { available: true, total: 0, visitors: [] };
+  if (!isDay(day)) return { available: true, total: 0, page: 1, visitors: [] };
   let rows: Row[], sources: Row[];
   try {
     [rows, sources] = await Promise.all([
@@ -121,7 +121,7 @@ export async function listDayVisitors(actor: Actor, day: string, limit = 200): P
       ),
     ]);
   } catch (e) {
-    if (missingTable(e)) return { available: false, total: 0, visitors: [] };
+    if (missingTable(e)) return { available: false, total: 0, page: 1, visitors: [] };
     throw e;
   }
   const source = new Map(sources.map((s) => [String(s.visitor), String(s.source)]));
@@ -139,7 +139,9 @@ export async function listDayVisitors(actor: Actor, day: string, limit = 200): P
   }
   const all = [...by.values()].sort((a, b) => b.last.getTime() - a.last.getTime());
   all.forEach((v) => v.pages.sort((a, b) => b.views - a.views || a.path.localeCompare(b.path)));
-  return { available: true, total: all.length, visitors: all.slice(0, limit) };
+  const pages = Math.max(1, Math.ceil(all.length / pageSize));
+  const p = Math.min(Math.max(1, Math.floor(page) || 1), pages);
+  return { available: true, total: all.length, page: p, visitors: all.slice((p - 1) * pageSize, p * pageSize) };
 }
 
 /** The daily report for the sheet: per day, visitors, page views, visitors by source, views by page. */

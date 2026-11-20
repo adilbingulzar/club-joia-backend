@@ -36,8 +36,10 @@ function rangeText(f: SalesFilters): string {
   return f.range === "custom" ? dates : RANGES.find((x) => x.id === f.range)!.label + " (" + dates + ")";
 }
 
-/** This page's query string: the period, and the day of the visitor list. */
-function visitsQuery(f: SalesFilters, day?: string): string {
+const PER_PAGE = 25;
+
+/** This page's query string: the period, and the day and page of the visitor list. */
+function visitsQuery(f: SalesFilters, day?: string, page = 1): string {
   const p = new URLSearchParams();
   if (f.range !== "all") p.set("range", f.range);
   if (f.range === "custom") {
@@ -45,6 +47,7 @@ function visitsQuery(f: SalesFilters, day?: string): string {
     if (f.to) p.set("to", f.to);
   }
   if (day) p.set("day", day);
+  if (page > 1) p.set("page", String(page));
   const s = p.toString();
   return s ? "?" + s : "";
 }
@@ -65,7 +68,7 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
   const f = readSalesFilters(params);
   const asked = (sp(params, "day") ?? "").slice(0, 10);
   const day = isDay(asked) ? asked : today();
-  const [stats, list] = await Promise.all([getVisitStats(actor, f), listDayVisitors(actor, day)]);
+  const [stats, list] = await Promise.all([getVisitStats(actor, f), listDayVisitors(actor, day, f.page, PER_PAGE)]);
   const t = stats.totals;
   const days = visitSeries(stats.byDay, f.from, f.to);
   const weekly = days.length > 0 && days[0].from !== days[0].to;
@@ -177,7 +180,6 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
       <div className="mb-3 mt-10 flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-black/55">
           Visitors on {dayLabel(day, true)} · {count(list.total)} {list.total === 1 ? "visitor" : "visitors"}
-          {list.total > list.visitors.length && " · latest " + list.visitors.length + " shown"}
         </h2>
         <form action="/admin/visits" method="get" className="flex items-end gap-2" aria-label="Day">
           {f.range !== "all" && <input type="hidden" name="range" value={f.range} />}
@@ -195,6 +197,7 @@ async function Visits({ searchParams }: { searchParams: Promise<SP> }) {
         rows={list.visitors}
         rowKey={(v) => v.visitor}
         empty="No visitors on this day."
+        pagination={{ page: list.page, pageSize: PER_PAGE, total: list.total, href: (p) => "/admin/visits" + visitsQuery(f, day, p) }}
         columns={[
           {
             header: "Time (Dubai)",
