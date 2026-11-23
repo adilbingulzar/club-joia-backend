@@ -9,6 +9,9 @@ import { contentSecurityPolicy, newNonce } from "@/lib/security/csp";
  */
 const PUBLIC_PATHS = ["/login", "/admin/login", "/activate", "/forgot-password", "/reset-password", "/offline", "/legal"];
 
+// The door scanner API, left out of the IP allowlist.
+const SCAN_API = /^\/api\/scan(\/|$)/;
+
 // Paths the sign-in redirect looks at: not API routes (they authorise themselves), Next internals
 // or static/public files.
 const GUARDED = /^\/((?!api|_next\/static|_next\/image|brand|icons|sw.js|manifest.webmanifest|robots.txt|favicon.ico).*)$/;
@@ -18,8 +21,8 @@ const GUARDED = /^\/((?!api|_next\/static|_next\/image|brand|icons|sw.js|manifes
  * nonce (src/lib/security/csp.ts), also passed on in the request headers, where Next.js finds it for
  * its own scripts. /api/files/* sets its own, stricter policy. Then the IP allowlist (the admin's
  * /admin/ip-allowlist and IP_ALLOWLIST, see src/lib/security/ip-allowlist-store.ts): any address not
- * on it gets 403 for everything, files and APIs included; with both empty, every address does. Then
- * the optimistic sign-in redirect below.
+ * on it gets 403 for everything, files and APIs included (but the scanner API, /api/scan/*); with both
+ * empty, every address does. Then the optimistic sign-in redirect below.
  */
 export async function proxy(request: NextRequest) {
   const nonce = newNonce();
@@ -27,7 +30,9 @@ export async function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
-  const res = answer(request, { request: { headers } }, await requestAllowed(request.headers));
+  // the scanner API (/api/scan/*) is open to every address: scanners on mobile data change address, and it has its own key (src/lib/scan-api.ts)
+  const ipAllowed = SCAN_API.test(request.nextUrl.pathname) || (await requestAllowed(request.headers));
+  const res = answer(request, { request: { headers } }, ipAllowed);
   if (!request.nextUrl.pathname.startsWith("/api/files/")) res.headers.set("Content-Security-Policy", policy);
   return res;
 }

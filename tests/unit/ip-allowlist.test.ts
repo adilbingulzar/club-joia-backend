@@ -46,6 +46,14 @@ describe("IP allowlist", () => {
     expect(await status("/api/files/x", "10.1.2.3")).toBe(200);
   });
 
+  it("leaves the scanner API (which has its own key) open to every address", async () => {
+    vi.stubEnv("IP_ALLOWLIST", "203.0.113.7");
+    expect(await status("/api/scan/tickets", "198.51.100.1")).toBe(200);
+    expect(await status("/api/scan/tickets/t1", "198.51.100.1")).toBe(200);
+    expect(await status("/api/scanner", "198.51.100.1")).toBe(403);
+    expect(await status("/staff/scanner", "198.51.100.1")).toBe(403);
+  });
+
   it("lets in the admin's addresses and IP_ALLOWLIST's together", async () => {
     vi.stubEnv("IP_ALLOWLIST", "203.0.113.7");
     panel.rows = [{ address: "198.51.100.0/24" }];
