@@ -905,6 +905,18 @@ model SystemSetting {
   @@map("system_settings")
 }
 
+/// Addresses allowed into this site, managed by super admins at /admin/ip-allowlist; together with
+/// IP_ALLOWLIST in .env (src/lib/security/ip-allowlist-store.ts). Empty and no IP_ALLOWLIST: everyone.
+model IpAllowlistEntry {
+  id          String   @id @default(cuid())
+  address     String   @unique @db.VarChar(64) /// one IP address or a CIDR range (203.0.113.0/24)
+  label       String   @db.VarChar(120)
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("ip_allowlist")
+}
+
 /// Append-only. UPDATE and DELETE are blocked by database triggers (see the init migration).
 model AuditLog {
   id          String   @id @default(cuid())

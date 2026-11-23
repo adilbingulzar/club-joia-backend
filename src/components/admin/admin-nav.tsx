@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, Bell, CalendarRange, ChartColumn, ClipboardList, ConciergeBell, Crown, Eye, LayoutDashboard, ListOrdered, ScanLine, Settings, Ticket, UserCog, Users,
+  Activity, Bell, CalendarRange, ChartColumn, ClipboardList, ConciergeBell, Crown, Eye, LayoutDashboard, ListOrdered, ScanLine, Settings, ShieldCheck, Ticket, UserCog, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Permission } from "@/lib/auth/permissions";
@@ -22,6 +22,7 @@ export const ADMIN_NAV: { href: string; label: string; icon: typeof Users; permi
   { href: "/admin/notifications", label: "Notifications", icon: Bell, permission: "notifications:send" },
   { href: "/admin/staff", label: "Staff", icon: UserCog, permission: "staff:manage" },
   { href: "/admin/audit", label: "Audit log", icon: ClipboardList, permission: "audit:view" },
+  { href: "/admin/ip-allowlist", label: "IP allowlist", icon: ShieldCheck, permission: "settings:manage" },
   { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings:manage" },
 ];
 

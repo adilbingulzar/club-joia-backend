@@ -26,6 +26,7 @@ import {
   updateProgrammeItem,
 } from "@/services/programme.service";
 import { updateSettings } from "@/services/settings.service";
+import { addIpAllowlistEntry, removeIpAllowlistEntry } from "@/services/ip-allowlist.service";
 import { changeRole, createStaff, resendStaffInvitation, setStaffStatus, updateStaffContact } from "@/services/staff.service";
 import { resetMfa } from "@/services/mfa.service";
 import { issueTicket, issueTicketsBulk, reissueCredential, revokeTicket, setTicketSuspended, upsertTicketType } from "@/services/ticket.service";
@@ -397,5 +398,27 @@ export async function updateSettingsAction(_p: AdminFormState, form: FormData): 
     await updateSettings(actor, d);
     revalidatePath("/admin/settings");
     return done("Settings saved.");
+  });
+}
+
+// ─── IP allowlist ───────────────────────────────────────────────────────────
+
+const ipEntrySchema = z.object({
+  address: z.string({ error: "Enter an IP." }).trim().min(1, "Enter an IP.").max(64, "Enter a valid IP, like 203.0.113.7."), // an empty field arrives as undefined
+  label: z.string().trim().max(120).optional().default(""), // optional
+});
+
+export async function addIpAllowlistAction(_p: AdminFormState, form: FormData): Promise<AdminFormState> {
+  return authedAction(ipEntrySchema, formToObject(form), async (actor, d) => {
+    await addIpAllowlistEntry(actor, d);
+    revalidatePath("/admin/ip-allowlist");
+    return done("Address added.");
+  });
+}
+
+export async function removeIpAllowlistAction(entryId: string) {
+  return authedAction(id, entryId, async (actor, e) => {
+    await removeIpAllowlistEntry(actor, e);
+    revalidatePath("/admin/ip-allowlist");
   });
 }
