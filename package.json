@@ -19,6 +19,7 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "admin:create": "tsx scripts/create-admin.ts",
+    "user:set-password": "tsx scripts/set-password.ts",
     "push:keys": "web-push generate-vapid-keys",
     "icons": "node scripts/generate-icons.mjs",
     "brand:logos": "node scripts/brand-logos.mjs",

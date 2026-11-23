@@ -49,7 +49,7 @@ async function Notifications({ searchParams }: { searchParams: Promise<SP> }) {
           />
           <ul className="mt-5 space-y-1 border-t border-black/8 pt-4 text-xs text-black/50">
             <li>Web push: {pushConfigured ? "configured" : "not configured (VAPID keys missing)"}</li>
-            <li>Email: {emailDeliveryConfigured() ? "configured" : "not available in V1"}</li>
+            <li>Email provider: {emailDeliveryConfigured() ? "configured (used for invitations, password resets and staff alerts — not for member notifications)" : "not configured"}</li>
             <li>SMS / WhatsApp / native push: planned channels (not available in V1)</li>
             <li>Scheduled sends are delivered by the cron endpoint — see README.</li>
           </ul>

@@ -4,11 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ROLE_LABELS } from "@/lib/auth/permissions";
 import type { Role } from "@/generated/prisma/enums";
+import { STAFF_ROLE_VALUES } from "@/validators/admin";
 import { changeRoleAction } from "../actions";
 
-const ROLES: Role[] = ["CONCIERGE", "CHECK_IN_STAFF", "SALES_VIEWER", "ADMIN", "SUPER_ADMIN"];
-
 export function RoleSelect({ userId, role }: { userId: string; role: Role }) {
+  // Older accounts may hold a role that is no longer offered: keep it listed so the select shows it.
+  const roles: Role[] = (STAFF_ROLE_VALUES as readonly Role[]).includes(role) ? [...STAFF_ROLE_VALUES] : [role, ...STAFF_ROLE_VALUES];
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -33,8 +34,8 @@ export function RoleSelect({ userId, role }: { userId: string; role: Role }) {
         }}
         className="h-8 rounded-lg border border-black/12 bg-white px-2 text-xs"
       >
-        {ROLES.map((r) => (
-          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+        {roles.map((r) => (
+          <option key={r} value={r} disabled={!(STAFF_ROLE_VALUES as readonly Role[]).includes(r)}>{ROLE_LABELS[r]}</option>
         ))}
       </select>
       {error && <p className="mt-1 text-[11px] text-ruby">{error}</p>}

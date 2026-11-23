@@ -58,7 +58,7 @@ aviation_requests   (id, member_id, concierge_request_id, from, to, depart_at, p
 ## 6. International expansion checklist
 
 - Data residency per region (EU members → EU database region), DPA with processors, cross-border transfer documentation.
-- Additional channels activated: SMS/WhatsApp to **members** (staff email/WhatsApp alerts already exist: `StaffAlertService`) (e.g. Twilio / Meta Cloud API), native push (APNs/FCM) for future native apps.
+- Additional channels activated: SMS/WhatsApp to **members** (staff email alerts already exist: `StaffAlertService`) (e.g. Twilio / Meta Cloud API), native push (APNs/FCM) for future native apps.
 - Apple / Google Wallet passes for the membership card (the card already uses non-sensitive data only and a stable membership number).
 - MFA enforced for all staff. Chapter-scoped admin roles.
 - Operational: multi-event dashboard, scanner offline mode (signed allow-lists or TOTP-style credentials as described in ARCHITECTURE §6).

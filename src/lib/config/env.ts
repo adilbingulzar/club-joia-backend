@@ -27,21 +27,15 @@ const schema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: z.stringbool().default(false),
 
-  EMAIL_DRIVER: z.enum(["console", "smtp", "resend"]).default("console"),
+  EMAIL_DRIVER: z.enum(["console", "postmark", "smtp", "resend"]).default("console"),
   EMAIL_FROM: z.string().default("CLUB JOIA 300 <no-reply@clubjoia.example>"),
+  /** postmark driver: the Server API token, and the transactional message stream to send on. */
+  POSTMARK_SERVER_TOKEN: z.string().optional(),
+  POSTMARK_MESSAGE_STREAM: z.string().min(1).default("outbound"),
   /** smtp driver: e.g. smtps://user:password@smtp.example.com:465 */
   SMTP_URL: z.string().optional(),
   /** resend driver */
   RESEND_API_KEY: z.string().optional(),
-
-  /** WhatsApp alerts to staff: "console" (logged only) or "twilio". */
-  WHATSAPP_DRIVER: z.enum(["console", "twilio"]).default("console"),
-  TWILIO_ACCOUNT_SID: z.string().optional(),
-  TWILIO_AUTH_TOKEN: z.string().optional(),
-  /** Sender, e.g. whatsapp:+14155238886 */
-  TWILIO_WHATSAPP_FROM: z.string().optional(),
-  /** Approved WhatsApp template (Content SID, HX…) with variables {{1}} = title, {{2}} = details, {{3}} = link. */
-  TWILIO_WHATSAPP_CONTENT_SID: z.string().optional(),
 
   CRON_SECRET: z.string().min(16).optional(),
 

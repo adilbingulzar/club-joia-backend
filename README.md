@@ -4,7 +4,7 @@ The private members' platform for CLUB JOIA 300, starting with the **Abu Dhabi G
 
 - **Members** (mobile PWA): metal membership card, event programme, tickets with rotating signed QR credentials, concierge requests, notifications and profile.
 - **Check-in staff** (`/staff/scanner`): live camera QR scanning, a "Photo of QR" fallback that works on any phone camera, manual ticket lookup, check-in or deny.
-- **Admin portal** (`/admin`, staff sign-in at **`/admin/login`**): members, tiers and entitlements, events (create new events, uploaded hero images), programme and tickets per event, access logs, concierge (email / WhatsApp alerts to the responsible staff), notifications, staff, audit log and settings.
+- **Admin portal** (`/admin`, staff sign-in at **`/admin/login`**): members, tiers and entitlements, events (create new events, uploaded hero images), programme and tickets per event, access logs, concierge (email alerts to the responsible staff), notifications, staff, audit log and settings.
 
 Stack: Next.js 16 (App Router, Cache Components), React 19, TypeScript (strict), Tailwind CSS 4, MySQL 8 with Prisma 7, Vitest and Playwright.
 Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Roadmap: [`docs/PHASE2.md`](docs/PHASE2.md), [`docs/PHASE3.md`](docs/PHASE3.md).
@@ -76,7 +76,7 @@ The seed creates the Abu Dhabi chapter, three tiers, the entitlement catalogue, 
 - **Unit** (`tests/unit`): QR signing and verification, the access decision engine (every scan result), entitlement resolution, membership status rules, RBAC and concierge permissions, timezone maths.
 - **Integration** (`tests/integration`): real MySQL, calling the service layer. Covers login and sessions, rate limiting, invitation → activation, ticket display, QR scanning, check-in, single entry, zone entitlements, revocation, credential reissue, membership suspension, concierge privacy, notifications and audit-log immutability.
 - **E2E** (`tests/e2e`): member logs in, opens the ticket QR, views the programme, saves an item (red marker, persisted) and submits a concierge request. Staff **scan the real QR through a simulated camera** and check the member in, then decode it again via **Photo of QR** without camera access. The staff sign-in refuses member accounts. An admin creates a new event with an uploaded hero image, then revokes the ticket, and the same QR scans as **Revoked**.
-- Also covered: event creation and cloning, event-scoped ticket issuing, programme icons, concierge alert routing by category, assignment alerts, WhatsApp number validation.
+- Also covered: event creation and cloning, event-scoped ticket issuing, programme icons, concierge alert routing by category, assignment alerts.
 
 Integration and E2E runs each **create their own throwaway database** (`joia_it_*` / `joia_e2e_*`) on the `DATABASE_URL` server, then migrate, seed and drop it afterwards. They never reset an existing database.
 
@@ -94,13 +94,13 @@ Phones can scan in two ways:
 1. **Live camera** (Scan QR). Mobile browsers only open the camera on a **secure (https) page**. In production this is automatic. On a local network use `npm run dev:lan` and open `https://<your-computer-ip>:3000/admin/login` on the phone, accepting the self-signed certificate warning once. A tunnel (e.g. Cloudflare Tunnel, ngrok) also works; add its hostname to `DEV_ALLOWED_ORIGINS`. A torch button appears where the phone supports it.
 2. **Photo of QR**: works everywhere, including plain http and browsers without live-camera access. The phone's own camera app takes a photo, and the code is decoded on the device.
 
-## Staff alerts (email / WhatsApp)
+## Staff alerts (email)
 
-- New member concierge requests alert the staff **responsible for that category** (Admin → Staff → Edit → "Responsible for"). Concierge staff with no categories selected receive all categories. If nobody covers a category, admins are alerted.
+- New member concierge requests alert every active super admin who has email alerts on. (Per-category responsibility still exists in code, but the "Responsible for" field is no longer shown on Admin → Staff.)
 - Assigning a request alerts the assignee (not when you assign it to yourself).
-- Each person chooses email and/or WhatsApp; WhatsApp needs their number in international format.
+- Each person chooses whether they get these alerts by email.
 - Every request shows, in its staff-only internal notes, who was alerted and on which channel, or why an alert wasn't sent.
-- Delivery: set `EMAIL_DRIVER=smtp` (with `SMTP_URL`) or `resend`, and `WHATSAPP_DRIVER=twilio`. With the default `console` drivers, alerts are only logged.
+- Delivery: set `EMAIL_DRIVER=postmark` (with `POSTMARK_SERVER_TOKEN`), `smtp` (with `SMTP_URL`) or `resend`. With the default `console` driver, alerts are only logged.
 
 ## Images
 
@@ -126,7 +126,7 @@ A QR code contains only `CJ1.<payload>.<HMAC-SHA256>`. The payload is `{ r: cred
 ## Creating admin accounts
 
 - **First production super admin:** on the server, run `npm run admin:create -- you@example.com "Your Name"`. It creates (or resets) an active super admin and prints a one-time random password. Then invite everyone else from the admin.
-- **Further staff:** Admin → Staff (super admin only). Choose a role, plus WhatsApp number, alert channels and concierge categories. You receive a one-time activation link to share securely while no email provider is configured. Staff sign in at `/admin/login`. Role changes and disabling sign the person out everywhere.
+- **Further staff:** Admin → Staff (super admin only). For now the roles offered are **Super admin** and **Sales viewer** (`STAFF_ROLE_VALUES` in `src/validators/admin.ts`; the other roles still exist in code). Choose a role and whether they get concierge alerts by email. You receive a one-time activation link to share securely while no email provider is configured. Staff sign in at `/admin/login`. Role changes and disabling sign the person out everywhere.
 - **Two-factor sign-in:** admins and super admins also enter a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password …). At their first sign-in they scan a QR code. Lost phone: Admin → Staff → Two-factor → Reset, or `npm run admin:create -- <email>` for a super admin. Needs `MFA_ENCRYPTION_KEY` (same value in club-joia-300-next). Details: [`docs/ARCHITECTURE.md#mfa`](docs/ARCHITECTURE.md#mfa).
 - **Members:** Admin → Members → New member. This creates an invited membership and an activation link. Activation sets the password, records consent to the terms and privacy policy, and activates the membership.
 
@@ -152,8 +152,7 @@ These are **not done in V1** and need decisions or inputs before launch:
 
 - **Final domain** and `NEXT_PUBLIC_APP_URL` (HTTPS).
 - **Production database:** MySQL 8 with backups, and a runtime user without DROP/ALTER/TRIGGER rights (see Deployment).
-- **Email provider:** SMTP and Resend drivers are built but not configured (needs an account, a verified sending domain and `SMTP_URL` / `RESEND_API_KEY`). Until then, activation and reset links are handed over manually from the admin UI and staff email alerts are only logged.
-- **WhatsApp:** the Twilio driver is built but not configured. It needs a Twilio account, a WhatsApp sender approved by Meta, and an approved message template (`TWILIO_WHATSAPP_CONTENT_SID`). Until then WhatsApp alerts are only logged.
+- **Email provider:** Postmark (`EMAIL_DRIVER=postmark`, `POSTMARK_SERVER_TOKEN`, `POSTMARK_MESSAGE_STREAM`); SMTP and Resend drivers also exist. Activation, password-reset and staff-alert emails are sent as branded HTML with a plain-text part, with Postmark link and open tracking turned off so sign-in links are never rewritten. With `EMAIL_DRIVER=console`, activation and reset links are handed over manually from the admin UI and staff email alerts are only logged.
 - **Real VAPID keys** and the `CRON_SECRET` scheduler.
 - **Object storage bucket** (S3, R2 or Supabase) for photos and attachments.
 - **Legal copy:** membership terms and privacy policy (`/legal/terms` and `/legal/privacy` are placeholders), plus the `TERMS_VERSION` constant.

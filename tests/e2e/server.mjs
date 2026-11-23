@@ -17,7 +17,8 @@ for (const row of stale) await admin.query(`DROP DATABASE IF EXISTS ${quoteDbNam
 await admin.query(`CREATE DATABASE ${quoteDbName(name)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
 await admin.end();
 const url = urlForDatabase(baseUrl, name);
-const env = { ...process.env, DATABASE_URL: url };
+// EMAIL_DRIVER=console: never deliver real email from e2e runs, whatever .env says.
+const env = { ...process.env, DATABASE_URL: url, EMAIL_DRIVER: "console" };
 execSync("npx prisma migrate deploy", { env, stdio: "ignore" });
 execSync("npx prisma db seed", { env, stdio: "ignore" });
 

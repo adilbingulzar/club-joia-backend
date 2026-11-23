@@ -21,7 +21,11 @@ export const PROGRAM_VISIBILITIES = ["DRAFT", "MEMBERS", "RESTRICTED"] as const;
 export const ENTRY_POLICIES = ["SINGLE_ENTRY", "DAILY_ENTRY", "MULTI_ENTRY"] as const;
 export const NOTIFICATION_TYPES = ["ANNOUNCEMENT", "PROGRAMME", "TICKET", "CONCIERGE", "TRANSPORT", "MEMBERSHIP", "SYSTEM"] as const;
 export const TARGET_TYPES = ["ALL_MEMBERS", "TIER", "EVENT", "MEMBER"] as const;
-export const STAFF_ROLE_VALUES = ["CONCIERGE", "CHECK_IN_STAFF", "SALES_VIEWER", "ADMIN", "SUPER_ADMIN"] as const;
+/**
+ * Roles a super admin can give from Admin → Staff. For now only super admins and sales viewers;
+ * the other staff roles still exist (Role enum, permissions) and can be offered again by adding them here.
+ */
+export const STAFF_ROLE_VALUES = ["SUPER_ADMIN", "SALES_VIEWER"] as const;
 
 export const assignMembershipSchema = z.object({
   memberId: z.string().min(1),
@@ -139,18 +143,8 @@ export const notificationSchema = z
 
 export const CONCIERGE_CATEGORY_VALUES = ["TRANSPORT", "DINING", "HOTEL", "YACHT", "NIGHTLIFE", "TICKET_SUPPORT", "SPECIAL_REQUEST", "OTHER"] as const;
 
-/** International number in E.164 form, e.g. +971501234567 (spaces/dashes are stripped). */
-export const whatsappSchema = z
-  .string()
-  .trim()
-  .optional()
-  .transform((v) => (v ? v.replace(/[\s\-().]/g, "") : null))
-  .refine((v) => v === null || /^\+[1-9]\d{7,14}$/.test(v), "Use international format, e.g. +971 50 123 4567.");
-
 const staffContactFields = {
-  whatsappNumber: whatsappSchema,
   alertByEmail: z.stringbool().default(false),
-  alertByWhatsapp: z.stringbool().default(false),
   conciergeCategories: z.array(z.enum(CONCIERGE_CATEGORY_VALUES)).default([]),
 };
 
@@ -160,12 +154,9 @@ export const staffSchema = z
     email: emailSchema,
     role: z.enum(STAFF_ROLE_VALUES),
     ...staffContactFields,
-  })
-  .refine((v) => !v.alertByWhatsapp || v.whatsappNumber, { message: "Add a WhatsApp number to receive WhatsApp alerts.", path: ["whatsappNumber"] });
+  });
 
-export const staffContactSchema = z
-  .object({ userId: z.string().min(1), name: z.string().trim().min(2).max(80), ...staffContactFields })
-  .refine((v) => !v.alertByWhatsapp || v.whatsappNumber, { message: "Add a WhatsApp number to receive WhatsApp alerts.", path: ["whatsappNumber"] });
+export const staffContactSchema = z.object({ userId: z.string().min(1), name: z.string().trim().min(2).max(80), ...staffContactFields });
 
 export const staffConciergeUpdateSchema = z.object({
   requestId: z.string().min(1),

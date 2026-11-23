@@ -7,3 +7,5 @@ process.env.MFA_ENCRYPTION_KEY ??= "test-mfa-key-test-mfa-key-test-mfa-0001";
 // Push is exercised as "not configured" in tests (no network calls).
 delete process.env.WEB_PUSH_PUBLIC_KEY;
 delete process.env.WEB_PUSH_PRIVATE_KEY;
+// Never deliver real email from tests, whatever .env says.
+process.env.EMAIL_DRIVER = "console";

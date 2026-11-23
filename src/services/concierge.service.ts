@@ -83,7 +83,7 @@ export async function createRequest(actor: Actor, input: NewConciergeRequest, at
         await recordAudit(actor, { action: "concierge.create", entityType: "concierge_request", entityId: request.id, after: { reference: request.reference, category: request.category } }, tx);
         return request;
       });
-      // Alert the responsible staff (email / WhatsApp per their preferences) without delaying the member.
+      // Alert the responsible staff (by email, per their preferences) without delaying the member.
       await runAfterResponse(() => alertNewConciergeRequest(created.id));
       return created;
     } catch (e) {

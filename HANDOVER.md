@@ -28,7 +28,7 @@ The two app folders share the same code except the theme (colours, logo variants
 - **Development passwords:** the seed creates demo accounts with publicly known development passwords. They're listed in `README.md`. Never seed a production database with them.
 - **Hosting:** the client's current hosting is GoDaddy cPanel shared hosting, which only runs PHP/MySQL. The landing page and carousel fit it; the main Next.js app runs on a Laravel Forge server with MySQL (see "Deployment" in `README.md`).
 - **Open before launch:**
-  - the email/WhatsApp providers;
+  - the email provider (Postmark: allow the server's IP address);
   - legal texts;
   - the placeholders in `landing/privacy.html`;
   - the final event programme;

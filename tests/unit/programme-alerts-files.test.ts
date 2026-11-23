@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isProgrammeIconKey, resolveProgrammeIcon } from "@/domain/programme-icons";
 import { selectNewRequestRecipients, type AlertCandidate } from "@/domain/concierge";
 import { storedImageUrl } from "@/lib/files";
-import { staffContactSchema, whatsappSchema } from "@/validators/admin";
+import { STAFF_ROLE_VALUES, staffSchema } from "@/validators/admin";
 
 describe("programme icons", () => {
   const icon = (title: string, category = "OTHER", explicit?: string | null) => resolveProgrammeIcon({ title, category, icon: explicit });
@@ -65,16 +65,11 @@ describe("uploaded images", () => {
   });
 });
 
-describe("staff WhatsApp numbers", () => {
-  it("normalises to E.164 and rejects local numbers", () => {
-    expect(whatsappSchema.parse("+971 50-123 4567")).toBe("+971501234567");
-    expect(whatsappSchema.parse("")).toBeNull();
-    expect(whatsappSchema.safeParse("050 123 4567").success).toBe(false);
-  });
-
-  it("requires a number before WhatsApp alerts can be switched on", () => {
-    const base = { userId: "u1", name: "Sam Staff", alertByWhatsapp: "on" };
-    expect(staffContactSchema.safeParse(base).success).toBe(false);
-    expect(staffContactSchema.safeParse({ ...base, whatsappNumber: "+971501234567" }).success).toBe(true);
+describe("staff roles offered in the admin", () => {
+  it("are only super admin and sales viewer", () => {
+    expect([...STAFF_ROLE_VALUES].sort()).toEqual(["SALES_VIEWER", "SUPER_ADMIN"]);
+    const base = { name: "Sam Staff", email: "sam@joia.test" };
+    expect(staffSchema.safeParse({ ...base, role: "SALES_VIEWER" }).success).toBe(true);
+    expect(staffSchema.safeParse({ ...base, role: "CONCIERGE" }).success).toBe(false);
   });
 });

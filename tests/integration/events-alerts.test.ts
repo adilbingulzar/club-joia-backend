@@ -92,7 +92,7 @@ describe("staff alerts for concierge", () => {
   it("a new request records which responsible staff were alerted (staff-only note)", async () => {
     const [admin, concierge, sophia] = await Promise.all([actorFor(EMAILS.admin), actorFor(EMAILS.concierge), actorFor(EMAILS.sophia)]);
     const conciergeUser = await db.user.findUniqueOrThrow({ where: { email: EMAILS.concierge } });
-    await updateStaffContact(admin, conciergeUser.id, { name: conciergeUser.name, whatsappNumber: "+971500000001", alertByEmail: true, alertByWhatsapp: true, conciergeCategories: ["TRANSPORT"] });
+    await updateStaffContact(admin, conciergeUser.id, { name: conciergeUser.name, alertByEmail: true, conciergeCategories: ["TRANSPORT"] });
 
     const req = await createRequest(sophia, { category: "TRANSPORT", subject: "Airport pickup", description: "Arriving Friday 10:00" });
     const staffView = await getRequest(concierge, req.id);
@@ -100,7 +100,6 @@ describe("staff alerts for concierge", () => {
     expect(note?.message).toContain(conciergeUser.name);
     // Local test env uses the console drivers: nothing is delivered and the note says so.
     expect(note?.message).toContain("email (not configured)");
-    expect(note?.message).toContain("WhatsApp (not configured)");
 
     // The member never sees alert notes.
     const memberView = await getRequest(sophia, req.id);
@@ -131,6 +130,6 @@ describe("staff alerts for concierge", () => {
 
   it("only super admins edit staff contact details", async () => {
     const manager = await actorFor(EMAILS.manager);
-    await expect(updateStaffContact(manager, manager.userId, { name: "x x", whatsappNumber: null, alertByEmail: true, alertByWhatsapp: false, conciergeCategories: [] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(updateStaffContact(manager, manager.userId, { name: "x x", alertByEmail: true, conciergeCategories: [] })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

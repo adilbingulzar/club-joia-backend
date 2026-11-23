@@ -17,7 +17,7 @@ export async function listStaff(actor: Actor) {
     orderBy: [{ role: "asc" }, { name: "asc" }],
     select: {
       id: true, name: true, email: true, role: true, status: true, lastLoginAt: true, mfaEnabled: true, createdAt: true,
-      whatsappNumber: true, alertByEmail: true, alertByWhatsapp: true, conciergeCategories: true,
+      alertByEmail: true, conciergeCategories: true,
     },
   });
   return rows.map((r) => ({ ...r, conciergeCategories: conciergeCategoryList(r.conciergeCategories) }));
@@ -25,9 +25,7 @@ export async function listStaff(actor: Actor) {
 
 /** How a staff member is reached for operational alerts (concierge new requests / assignments). */
 export type StaffContact = {
-  whatsappNumber: string | null;
   alertByEmail: boolean;
-  alertByWhatsapp: boolean;
   /** Concierge request categories this person is responsible for (drives new-request alerts). */
   conciergeCategories: ConciergeCategory[];
 };
@@ -41,9 +39,7 @@ export async function createStaff(actor: Actor, input: { name: string; email: st
   const user = await db.user.create({
     data: {
       name: input.name, email: input.email, role: input.role, status: "PENDING_ACTIVATION",
-      whatsappNumber: input.whatsappNumber ?? null,
       alertByEmail: input.alertByEmail ?? true,
-      alertByWhatsapp: input.alertByWhatsapp ?? false,
       conciergeCategories: input.conciergeCategories ?? [],
     },
   });
@@ -90,12 +86,9 @@ export async function updateStaffContact(actor: Actor, userId: string, input: St
   requirePermission(actor, "staff:manage");
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user || user.role === "MEMBER") throw notFound("Staff member");
-  if (input.alertByWhatsapp && !input.whatsappNumber) throw new AppError("VALIDATION", "Add a WhatsApp number to receive WhatsApp alerts.", { whatsappNumber: ["Required for WhatsApp alerts."] });
   const data = {
     name: input.name,
-    whatsappNumber: input.whatsappNumber,
     alertByEmail: input.alertByEmail,
-    alertByWhatsapp: input.alertByWhatsapp,
     conciergeCategories: input.conciergeCategories,
   };
   await db.user.update({ where: { id: userId }, data });
@@ -103,7 +96,7 @@ export async function updateStaffContact(actor: Actor, userId: string, input: St
     action: "staff.contact_update",
     entityType: "user",
     entityId: userId,
-    before: { name: user.name, whatsappNumber: user.whatsappNumber, alertByEmail: user.alertByEmail, alertByWhatsapp: user.alertByWhatsapp, conciergeCategories: user.conciergeCategories },
+    before: { name: user.name, alertByEmail: user.alertByEmail, conciergeCategories: user.conciergeCategories },
     after: data,
   });
 }

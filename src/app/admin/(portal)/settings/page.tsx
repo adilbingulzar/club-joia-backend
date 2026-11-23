@@ -30,7 +30,7 @@ async function Settings() {
   const checks: [string, boolean, string][] = [
     ["Web push (VAPID)", Boolean(e.WEB_PUSH_PUBLIC_KEY && e.WEB_PUSH_PRIVATE_KEY), "WEB_PUSH_PUBLIC_KEY / WEB_PUSH_PRIVATE_KEY"],
     ["Previous QR key (rotation window)", Boolean(e.QR_SIGNING_SECRET_PREVIOUS), "QR_SIGNING_SECRET_PREVIOUS"],
-    ["Email delivery", emailDeliveryConfigured(), "EMAIL_DRIVER — only 'console' exists in V1"],
+    ["Email delivery", emailDeliveryConfigured(), `EMAIL_DRIVER=${e.EMAIL_DRIVER}`],
     ["Object storage", e.STORAGE_DRIVER === "s3", `STORAGE_DRIVER=${e.STORAGE_DRIVER}`],
     ["Cron secret (scheduled notifications)", Boolean(e.CRON_SECRET), "CRON_SECRET"],
   ];

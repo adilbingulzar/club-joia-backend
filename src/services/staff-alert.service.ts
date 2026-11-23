@@ -3,32 +3,27 @@ import { db } from "@/lib/db";
 import { conciergeCategoryList } from "@/lib/json-list";
 import { env } from "@/lib/config/env";
 import { CONCIERGE_CATEGORY_LABELS, selectNewRequestRecipients } from "@/domain/concierge";
-import { sendEmail } from "./email.service";
-import { sendWhatsApp } from "./whatsapp.service";
+import { composeEmail, sendEmail, type EmailContent } from "./email.service";
 
 /**
- * StaffAlertService — operational alerts to staff by email and/or WhatsApp, according to each
- * person's preferences (Admin → Staff). Alerts are best-effort: a provider failure never blocks
+ * StaffAlertService — operational alerts to staff by email, according to each person's
+ * preferences (Admin → Staff). Alerts are best-effort: a provider failure never blocks
  * the member's request. The outcome is recorded as an internal (staff-only) note on the request.
  *
  * Alert content is deliberately minimal (reference, category, subject, link) — member details stay
  * behind the staff portal sign-in.
  */
 
-type Recipient = { id: string; name: string; email: string; whatsappNumber: string | null; alertByEmail: boolean; alertByWhatsapp: boolean };
+type Recipient = { id: string; name: string; email: string; alertByEmail: boolean };
 
 const link = (requestId: string) => new URL(`/admin/concierge/${requestId}`, env().NEXT_PUBLIC_APP_URL).toString();
 
-async function deliver(r: Recipient, subject: string, text: string, wa: { title: string; details: string; link: string }) {
+async function deliver(r: Recipient, email: EmailContent) {
   const channels: string[] = [];
   const failed: string[] = [];
   if (r.alertByEmail) {
-    const res = await sendEmail({ to: r.email, subject, text });
+    const res = await sendEmail({ to: r.email, ...email });
     (res.delivered ? channels : failed).push(res.delivered ? "email" : `email (${res.driver === "console" ? "not configured" : "failed"})`);
-  }
-  if (r.alertByWhatsapp && r.whatsappNumber) {
-    const res = await sendWhatsApp({ to: r.whatsappNumber, ...wa });
-    (res.delivered ? channels : failed).push(res.delivered ? "WhatsApp" : `WhatsApp (${res.driver === "console" ? "not configured" : "failed"})`);
   }
   return { name: r.name, channels, failed };
 }
@@ -43,7 +38,7 @@ async function logOutcome(requestId: string, heading: string, results: Awaited<R
   });
 }
 
-const recipientSelect = { id: true, name: true, email: true, role: true, status: true, conciergeCategories: true, whatsappNumber: true, alertByEmail: true, alertByWhatsapp: true } as const;
+const recipientSelect = { id: true, name: true, email: true, role: true, status: true, conciergeCategories: true, alertByEmail: true } as const;
 
 /** New member request → the staff responsible for its category (see selectNewRequestRecipients). */
 export async function alertNewConciergeRequest(requestId: string) {
@@ -59,9 +54,20 @@ export async function alertNewConciergeRequest(requestId: string) {
       recipients.map((r) =>
         deliver(
           r,
-          `New concierge request ${request.reference} · ${category}`,
-          `Dear ${r.name},\n\nA new ${category.toLowerCase()} request has arrived.\n\nReference: ${request.reference}\nSubject: ${request.subject}\nPriority: ${request.priority.toLowerCase()}\n\nOpen it in the staff portal:\n${url}\n\nCLUB JOIA 300 Operations`,
-          { title: `New concierge request ${request.reference}`, details: `${category} · ${request.subject}`, link: url },
+          composeEmail({
+            subject: `New concierge request ${request.reference} · ${category}`,
+            tag: "staff-alert",
+            preheader: `${category} · ${request.subject}`,
+            greeting: `Dear ${r.name},`,
+            intro: [`A new ${category.toLowerCase()} request has arrived.`],
+            details: [
+              ["Reference", request.reference],
+              ["Subject", request.subject],
+              ["Priority", request.priority.toLowerCase()],
+            ],
+            action: { label: "Open in the staff portal", url },
+            signOff: "CLUB JOIA 300 Operations",
+          }),
         ),
       ),
     );
@@ -85,9 +91,21 @@ export async function alertConciergeAssignment(requestId: string, assigneeId: st
     const url = link(request.id);
     const result = await deliver(
       assignee,
-      `Assigned to you: ${request.reference} · ${category}`,
-      `Dear ${assignee.name},\n\n${by?.name ?? "A colleague"} has assigned a concierge request to you.\n\nReference: ${request.reference}\nCategory: ${category}\nSubject: ${request.subject}\nPriority: ${request.priority.toLowerCase()}\n\nOpen it in the staff portal:\n${url}\n\nCLUB JOIA 300 Operations`,
-      { title: `Assigned to you: ${request.reference}`, details: `${category} · ${request.subject}`, link: url },
+      composeEmail({
+        subject: `Assigned to you: ${request.reference} · ${category}`,
+        tag: "staff-alert",
+        preheader: `${category} · ${request.subject}`,
+        greeting: `Dear ${assignee.name},`,
+        intro: [`${by?.name ?? "A colleague"} has assigned a concierge request to you.`],
+        details: [
+          ["Reference", request.reference],
+          ["Category", category],
+          ["Subject", request.subject],
+          ["Priority", request.priority.toLowerCase()],
+        ],
+        action: { label: "Open in the staff portal", url },
+        signOff: "CLUB JOIA 300 Operations",
+      }),
     );
     await logOutcome(request.id, "Assignment alert:", [result]);
   } catch (e) {

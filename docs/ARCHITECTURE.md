@@ -149,11 +149,11 @@ token = "CJ1." + b64url(JSON{ r: credentialRef, n: nonce, e: expiry }) + "." + b
 
 Scheduled notifications are processed by `/api/cron/notifications`. System events (ticket issued, concierge updates, tier change) call `notifyMember()`.
 
-**Staff alerts** are separate from member notifications. `StaffAlertService` (`src/services/staff-alert.service.ts`) emails and/or WhatsApps staff, according to each person's preferences on `users` (`alert_by_email`, `alert_by_whatsapp`, `whatsapp_number`, `concierge_categories`):
+**Staff alerts** are separate from member notifications. `StaffAlertService` (`src/services/staff-alert.service.ts`) emails staff, according to each person's preferences on `users` (`alert_by_email`, `concierge_categories`). WhatsApp alerts were removed; the unused `whatsapp_number` / `alert_by_whatsapp` columns are left in place:
 
 - **New concierge request** → recipients from the pure rule `selectNewRequestRecipients()` (`src/domain/concierge.ts`): category owners plus concierge generalists, escalating to admins when nobody covers the category.
 - **Assignment** → the assignee, unless they assigned themselves.
-- Transports: `EmailService` (`console` | `smtp` via nodemailer | `resend`) and `WhatsAppService` (`console` | `twilio`, using an approved template when `TWILIO_WHATSAPP_CONTENT_SID` is set).
+- Transport: `EmailService` (`console` | `postmark` | `smtp` via nodemailer | `resend`; HTML + text bodies built by `composeEmail`).
 - Alerts run after the response (`next/server` `after()`), so a slow provider never delays the member. They are best-effort, with minimal content (reference, category, subject, link; no member personal data). The outcome is written as a staff-only internal note on the request.
 
 **Images** are uploaded through `StorageService` (size and magic-byte checks) and stored as keys in `events.hero_image` and `event_program_items.image`. `storedImageUrl()` maps a key to `/api/files/…`, and external URLs are never rendered. Programme icons are keys from `src/domain/programme-icons.ts` (`event_program_items.icon`), or chosen automatically from the title or category.
