@@ -26,6 +26,8 @@ import {
   updateProgrammeItem,
 } from "@/services/programme.service";
 import { updateSettings } from "@/services/settings.service";
+import { sendTestEmail } from "@/services/email-test.service";
+import { emailSchema } from "@/validators/auth";
 import { addIpAllowlistEntry, removeIpAllowlistEntry } from "@/services/ip-allowlist.service";
 import { changeRole, createStaff, resendStaffInvitation, setStaffStatus, updateStaffContact } from "@/services/staff.service";
 import { resetMfa } from "@/services/mfa.service";
@@ -420,5 +422,20 @@ export async function removeIpAllowlistAction(entryId: string) {
   return authedAction(id, entryId, async (actor, e) => {
     await removeIpAllowlistEntry(actor, e);
     revalidatePath("/admin/ip-allowlist");
+  });
+}
+
+// ─── Email test (hidden page /admin/email-test) ─────────────────────────────
+
+const testEmailSchema = z.object({
+  to: z.preprocess((v) => v ?? "", emailSchema), // an empty field arrives as undefined
+  subject: z.string().trim().max(150).optional().transform((v) => v || "CLUB JOIA 300 test email"),
+  text: z.string().trim().max(5000).optional().transform((v) => v || "This is a test email from admin.clubjoia300.com."),
+});
+
+export async function sendTestEmailAction(_p: AdminFormState, form: FormData): Promise<AdminFormState> {
+  return authedAction(testEmailSchema, formToObject(form), async (actor, d) => {
+    const r = await sendTestEmail(actor, d);
+    return done(`Sent to ${d.to} through ${r.driver}. Check the inbox and the spam folder.`);
   });
 }
