@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Check } from "lucide-react";
-import { Button, SubmitButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { FormMessage } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/joia/confirm-dialog";
 import type { ActionError, ActionResult } from "@/lib/errors";
@@ -28,13 +28,21 @@ export function ActionForm({
   submitVariant?: "primary" | "secondary" | "danger";
 }) {
   const router = useRouter();
-  const [state, formAction] = useActionState<AdminFormState, FormData>(async (prev, form) => {
+  const [state, formAction, pending] = useActionState<AdminFormState, FormData>(async (prev, form) => {
     const res = await action(prev, form);
     if (res?.ok && res.data?.redirect) router.push(res.data.redirect);
     return res;
   }, undefined);
+  const [, startTransition] = useTransition();
+  // Submitted by hand, not as <form action>: React resets a form after its action, which would empty
+  // every field the person typed when the server answers with an error. resetOnSuccess still resets (key).
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+    startTransition(() => formAction(data));
+  };
   return (
-    <form action={formAction} className={className ?? "space-y-4"} noValidate key={resetOnSuccess && state?.ok ? JSON.stringify(state) : undefined}>
+    <form onSubmit={submit} className={className ?? "space-y-4"} noValidate key={resetOnSuccess && state?.ok ? JSON.stringify(state) : undefined}>
       {state && !state.ok && <FormMessage tone="light" error={state.error} />}
       {state?.ok && state.data?.message && <FormMessage tone="light" success={state.data.message} />}
       {state?.ok && state.data?.link && <HandoffLink link={state.data.link} />}
@@ -44,9 +52,9 @@ export function ActionForm({
         </Link>
       )}
       {children}
-      <SubmitButton variant={submitVariant} size="sm" pendingLabel="Saving">
-        {submitLabel}
-      </SubmitButton>
+      <Button type="submit" variant={submitVariant} size="sm" loading={pending}>
+        {pending ? "Saving" : submitLabel}
+      </Button>
     </form>
   );
 }
@@ -82,7 +90,7 @@ export function ActionButton({
 }: {
   run: () => Promise<ActionResult<unknown>>;
   label: string;
-  confirm?: { title: string; description?: string; confirmLabel?: string; destructive?: boolean };
+  confirm?: { title: string; description?: string; confirmLabel?: string; cancelLabel?: string; destructive?: boolean };
   variant?: "primary" | "secondary" | "danger" | "ghost" | "outline";
   size?: "sm" | "md";
 }) {
@@ -115,6 +123,7 @@ export function ActionButton({
           title={confirm.title}
           description={confirm.description}
           confirmLabel={confirm.confirmLabel ?? label}
+          cancelLabel={confirm.cancelLabel}
           destructive={confirm.destructive}
           pending={pending}
           onCancel={() => setOpen(false)}

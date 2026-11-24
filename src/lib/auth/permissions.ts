@@ -33,6 +33,7 @@ export const PERMISSIONS = [
   "sales:view",
   "sales:export",
   "visits:view",
+  "sales:links",
   "audit:view",
   "staff:manage",
   "settings:manage",
@@ -80,11 +81,14 @@ const ADMIN: Permission[] = [
   "visits:view",
   // the CSV downloads of sales, pre-registrations and visits (buyers' personal details)
   "sales:export",
+  // payment links: fill in the checkout for a buyer and send them the link (src/services/payment-links.service.ts)
+  "sales:links",
   "audit:view",
 ];
 
-// sees the website's sales, pre-registrations and visits in the admin, nothing else; no downloads
-const SALES_VIEWER: Permission[] = ["sales:view", "visits:view", "admin:access"];
+// sees the website's sales, pre-registrations and visits in the admin, and makes payment links for
+// buyers (only theirs); no downloads
+const SALES_VIEWER: Permission[] = ["sales:view", "visits:view", "sales:links", "admin:access"];
 
 const SUPER_ADMIN: Permission[] = [...ADMIN, "staff:manage", "settings:manage", "events:manage"];
 

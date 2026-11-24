@@ -27,6 +27,7 @@ import {
 } from "@/services/programme.service";
 import { updateSettings } from "@/services/settings.service";
 import { sendTestEmail } from "@/services/email-test.service";
+import { cancelPaymentLink, createPaymentLink } from "@/services/payment-links.service";
 import { emailSchema } from "@/validators/auth";
 import { addIpAllowlistEntry, removeIpAllowlistEntry } from "@/services/ip-allowlist.service";
 import { changeRole, createStaff, resendStaffInvitation, setStaffStatus, updateStaffContact } from "@/services/staff.service";
@@ -437,5 +438,53 @@ export async function sendTestEmailAction(_p: AdminFormState, form: FormData): P
   return authedAction(testEmailSchema, formToObject(form), async (actor, d) => {
     const r = await sendTestEmail(actor, d);
     return done(`Sent to ${d.to} through ${r.driver}. Check the inbox and the spam folder.`);
+  });
+}
+
+// ─── Payment links (Admin > Payment links) ──────────────────────────
+
+const req = (message: string) => z.preprocess((v) => v ?? "", z.string().trim().min(1, message));
+const paymentLinkSchema = z.object({
+  firstName: req("Enter the first name.").pipe(z.string().max(100)),
+  lastName: req("Enter the last name.").pipe(z.string().max(100)),
+  email: z.preprocess((v) => v ?? "", emailSchema),
+  address: req("Enter the address.").pipe(z.string().max(200)),
+  zipcode: req("Enter the zip code.").pipe(z.string().max(20)),
+  city: req("Enter the city.").pipe(z.string().max(100)),
+  country: req("Select the country.").pipe(z.string().length(2)),
+  gender: z.enum(["male", "female", "nogender"]).optional(),
+  birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date of birth.").optional(),
+  phoneCode: req("Select the phone country code.").pipe(z.string().length(2)),
+  phone: req("Enter the mobile number.").pipe(z.string().max(20)),
+  over21: z.literal("on", { error: "Confirm that the buyer is older than 21." }),
+  terms: z.literal("on", { error: "Confirm that the buyer agrees to the terms and conditions." }),
+  linkDays: z.preprocess((v) => Number(v ?? 1), z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)], { error: "Choose how long the link is valid." })),
+  sendEmail: z.literal("on").optional(),
+});
+
+export async function createPaymentLinkAction(_p: AdminFormState, form: FormData): Promise<AdminFormState> {
+  // tickets: qty:<ticket id> = quantity
+  const items: { id: string; quantity: number }[] = [];
+  for (const [key, value] of form.entries()) {
+    if (!key.startsWith("qty:") || typeof value !== "string") continue;
+    const quantity = Number(value || 0);
+    if (Number.isInteger(quantity) && quantity > 0) items.push({ id: key.slice(4), quantity });
+  }
+  return authedAction(paymentLinkSchema, formToObject(form), async (actor, d) => {
+    const { linkDays, sendEmail, ...buyer } = d;
+    const made = await createPaymentLink(actor, { ...buyer, gender: buyer.gender ?? "", birthday: buyer.birthday ?? "", over21: true, terms: true }, items, {
+      linkDays,
+      sendEmail: sendEmail === "on",
+    });
+    revalidatePath("/admin/payment-links");
+    const mail = sendEmail === "on" ? (made.emailed ? "&emailed=1" : "&emailed=0") : "";
+    return done("Payment link created.", { redirect: "/admin/payment-links?made=" + encodeURIComponent(made.ref) + mail });
+  });
+}
+
+export async function cancelPaymentLinkAction(ref: string) {
+  return authedAction(z.string().min(1).max(64), ref, async (actor, r) => {
+    await cancelPaymentLink(actor, r);
+    revalidatePath("/admin/payment-links");
   });
 }

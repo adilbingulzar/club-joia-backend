@@ -41,6 +41,9 @@ const schema = z.object({
 
   /** API key of the scanner API (X-Api-Key header, src/app/api/scan). Unset or empty: the API answers 503. */
   SCAN_API_KEY: z.string().optional(),
+  // Admin > Sales > Payment links: the website's address and its SHOP_ADMIN_KEY (club-joia-300-next app/api/staff)
+  SHOP_API_URL: z.string().optional(),
+  SHOP_ADMIN_KEY: z.string().optional(),
 
   /**
    * Encrypts the authenticator-app secrets of admin accounts (MFA). At least 32 characters, e.g.
