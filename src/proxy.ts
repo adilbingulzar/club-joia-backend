@@ -13,6 +13,8 @@ const PUBLIC_PATHS = ["/login", "/admin/login", "/activate", "/forgot-password",
 // and the member app API the website's server calls (src/lib/member-api.ts).
 const SCAN_API = /^\/api\/scan(\/|$)/;
 const MEMBER_API = /^\/api\/member-app\//;
+// members' email links that belong on the website (src/services/auth.service.ts appLink)
+const MEMBER_LINKS = ["/activate", "/reset-password"];
 
 // Paths the sign-in redirect looks at: not API routes (they authorise themselves), Next internals
 // or static/public files.
@@ -43,6 +45,16 @@ export async function proxy(request: NextRequest) {
 /** What the request gets; `pass` = the request headers with the nonce, for the page that renders. */
 function answer(request: NextRequest, pass: { request: { headers: Headers } }, ipAllowed: boolean): NextResponse {
   if (!ipAllowed) {
+    // a member's activation or reset link from an older email, opened away from the allowlist: the same
+    // link on the website, where members sign in (staff use these pages from allowed addresses only)
+    const site = process.env.MEMBER_APP_URL;
+    if (site && MEMBER_LINKS.includes(request.nextUrl.pathname)) {
+      try {
+        return NextResponse.redirect(new URL(request.nextUrl.pathname + request.nextUrl.search, site));
+      } catch {
+        // a bad MEMBER_APP_URL: the usual answer below
+      }
+    }
     return new NextResponse("Access denied.", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
   }
   const { pathname, search } = request.nextUrl;

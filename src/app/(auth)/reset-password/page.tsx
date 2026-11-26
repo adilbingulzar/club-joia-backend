@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { env } from "@/lib/config/env";
 import { peekAuthToken } from "@/services/auth.service";
 import { PASSWORD_MIN } from "@/validators/auth";
 import { SetPasswordForm } from "./set-password-form";
@@ -32,6 +34,9 @@ async function ResetBody({ searchParams }: Pick<PageProps<"/reset-password">, "s
       </div>
     );
   }
+  // a member's reset link is for the website (members sign in there): the same link on its address
+  const site = env().MEMBER_APP_URL;
+  if (valid.role === "MEMBER" && site) redirect(new URL(`/reset-password?token=${encodeURIComponent(token)}`, site).toString());
   return (
     <div className="mt-10">
       <p className="mb-6 text-center text-sm text-pearl-muted">

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { env } from "@/lib/config/env";
 import { peekAuthToken } from "@/services/auth.service";
 import { getSettings } from "@/services/settings.service";
 import { PASSWORD_MIN } from "@/validators/auth";
@@ -29,6 +31,9 @@ async function ActivateBody({ searchParams }: Pick<PageProps<"/activate">, "sear
       </p>
     );
   }
+  // a member's invitation is for the website (members sign in there): the same link on its address
+  const site = env().MEMBER_APP_URL;
+  if (invite.role === "MEMBER" && site) redirect(new URL(`/activate?token=${encodeURIComponent(token)}`, site).toString());
   const settings = await getSettings();
   return (
     <div className="mt-8">
