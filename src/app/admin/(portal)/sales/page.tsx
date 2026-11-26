@@ -357,6 +357,8 @@ async function Sales({ searchParams }: { searchParams: Promise<SP> }) {
                 ) : (
                   <span className="text-xs text-black/55">Member</span>
                 )
+              ) : o.status === "paid" && o.staffEmail ? (
+                <span className="whitespace-nowrap text-xs text-black/45" title="This email belongs to a staff account">Staff account</span>
               ) : o.status === "paid" && can(actor.role, "members:manage") ? (
                 <MakeMemberButton orderRef={o.ref} buyer={o.buyer.name} />
               ) : (

@@ -98,7 +98,7 @@ describe("sales CSV", () => {
       ref: "CJ1", status: "paid", createdAt: new Date("2026-11-09T06:00:00Z"), paidAt: new Date("2026-11-09T06:05:00Z"),
       buyer: { name: '=HYPERLINK("x")', email: "a@b.co", mobile: "+92 300", country: "pakistan" },
       items: [{ productId: "ruby-red/3-days", name: "Ruby Red, 3 days", quantity: 2, price: 8000 }],
-      amount: 16000, currency: "AED", tickets: 8, error: null, agencyCode: "AGENCY 7", memberId: null,
+      amount: 16000, currency: "AED", tickets: 8, error: null, agencyCode: "AGENCY 7", memberId: null, staffEmail: false,
     };
     const lines = ordersCsv([order]).replace("﻿", "").trim().split("\r\n");
     expect(lines).toHaveLength(2);

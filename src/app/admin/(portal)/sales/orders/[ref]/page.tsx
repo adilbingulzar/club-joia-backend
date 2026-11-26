@@ -127,7 +127,9 @@ async function Order({ params }: Pick<PageProps<"/admin/sales/orders/[ref]">, "p
               ]}
             />
           ) : (
-            o.status === "paid" ? (
+            o.status === "paid" && o.staffEmail ? (
+              <Empty>This order&rsquo;s email belongs to a staff account, so no member is made for it.</Empty>
+            ) : o.status === "paid" ? (
               <div className="space-y-3">
                 <p className="text-sm text-black/55">Not a member yet. Make the buyer a member with this order&rsquo;s tier and tickets; they get the invitation to sign in on the website.</p>
                 {can(actor.role, "members:manage") && (

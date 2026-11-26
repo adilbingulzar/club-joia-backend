@@ -291,6 +291,8 @@ export type SalesOrderRow = {
   agencyCode: string | null;
   /** The member made from this order (Admin > Sales "Make member"), or null. */
   memberId: string | null;
+  /** the email is a staff account's: no "Make member" */
+  staffEmail: boolean;
 };
 
 function orderRow(o: Row): SalesOrderRow {
@@ -309,10 +311,13 @@ function orderRow(o: Row): SalesOrderRow {
     error: o.error ? String(o.error) : null,
     agencyCode: o.agency_code ? String(o.agency_code) : null,
     memberId: o.member_id ? String(o.member_id) : null,
+    staffEmail: Boolean(Number(o.staff_email)),
   };
 }
 
-const BASE_COLUMNS = "o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at, o.member_id";
+// the order's email is a staff account's (Super Admin, Admin, ...): its buyer can't be made a member
+const STAFF_EMAIL = "EXISTS (SELECT 1 FROM users su WHERE su.email = o.email AND su.role <> 'MEMBER')";
+const BASE_COLUMNS = `o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at, o.member_id, ${STAFF_EMAIL} AS staff_email`;
 async function listColumns(): Promise<string> {
   return BASE_COLUMNS + ((await hasAgencyCode()) ? ", o.agency_code" : "");
 }
@@ -418,7 +423,7 @@ export async function listOrdersWithoutMember(actor: Actor, limit = 300): Promis
   try {
     const rows = await query(
       `SELECT o.ref, o.email, o.buyer, o.items, o.amount, o.currency, o.paid_at FROM shop_orders o
-       WHERE o.status = 'paid' AND o.member_id IS NULL ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC LIMIT ${Math.min(Math.max(Math.floor(limit), 1), 1000)}`,
+       WHERE o.status = 'paid' AND o.member_id IS NULL AND NOT ${STAFF_EMAIL} ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC LIMIT ${Math.min(Math.max(Math.floor(limit), 1), 1000)}`,
     );
     return rows.map((o) => {
       const buyer = json<Record<string, string>>(o.buyer, {});
