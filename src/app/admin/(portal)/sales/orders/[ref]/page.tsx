@@ -9,6 +9,8 @@ import { getSalesOrder } from "@/services/sales.service";
 import { AdminCard, AdminPageHeader } from "@/components/admin/admin-data-table";
 import { Empty, OrderStatusBadge } from "@/components/admin/sales-parts";
 import { StatusBadge } from "@/components/joia/badges";
+import { ActionButton } from "@/components/admin/action-controls";
+import { makeMemberAction } from "../../../actions";
 import { LoadingSkeleton } from "@/components/joia/states";
 import { count, dateTime, money, PAYMENT_STATUS } from "@/lib/sales/format";
 
@@ -125,7 +127,26 @@ async function Order({ params }: Pick<PageProps<"/admin/sales/orders/[ref]">, "p
               ]}
             />
           ) : (
-            <Empty>{o.status === "paid" ? "Not made yet." : "Made once the order is paid."}</Empty>
+            o.status === "paid" ? (
+              <div className="space-y-3">
+                <p className="text-sm text-black/55">Not a member yet. Make the buyer a member with this order&rsquo;s tier and tickets; they get the invitation to sign in on the website.</p>
+                {can(actor.role, "members:manage") && (
+                  <ActionButton
+                    run={makeMemberAction.bind(null, o.ref)}
+                    label="Make member"
+                    variant="primary"
+                    confirm={{
+                      title: "Make " + (o.buyer.name || "this buyer") + " a member?",
+                      description: "Makes the member with this order's tier and tickets, or adds them to the member with this email, and emails the invitation to sign in on the website.",
+                      confirmLabel: "Make member",
+                      cancelLabel: "Not now",
+                    }}
+                  />
+                )}
+              </div>
+            ) : (
+              <Empty>A member can be made once the order is paid.</Empty>
+            )
           )}
         </AdminCard>
 

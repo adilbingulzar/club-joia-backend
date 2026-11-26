@@ -3,6 +3,9 @@ import { Suspense } from "react";
 import { requirePermissionPage } from "@/lib/auth/dal";
 import { listChapters } from "@/services/member.service";
 import { listTiers } from "@/services/membership.service";
+import { listOrdersWithoutMember } from "@/services/sales.service";
+import { itemsText, money } from "@/lib/sales/format";
+import { MakeMemberFromSale } from "./from-sale";
 import { AdminCard, AdminPageHeader } from "@/components/admin/admin-data-table";
 import { ActionForm } from "@/components/admin/action-controls";
 import { Checkbox, SelectField, TextField } from "@/components/ui/form";
@@ -23,10 +26,17 @@ export default function NewMemberPage() {
 }
 
 async function Form() {
-  await requirePermissionPage("members:manage");
-  const [tiers, chapters] = await Promise.all([listTiers(), listChapters()]);
+  const actor = await requirePermissionPage("members:manage");
+  const [tiers, chapters, sales] = await Promise.all([listTiers(), listChapters(), listOrdersWithoutMember(actor)]);
   return (
-    <AdminCard className="max-w-3xl">
+    <>
+    <AdminCard title="From a website sale" className="mb-6 max-w-3xl">
+      <p className="mb-4 text-sm text-black/55">
+        The buyer of a paid order, with its tier and tickets (or added to the member with that email). The invitation to sign in on the website goes by email.
+      </p>
+      <MakeMemberFromSale sales={sales.map((s) => ({ ref: s.ref, label: `${s.name || "—"} · ${s.email} · ${itemsText(s.items)} · ${money(s.amount, s.currency)} · ${s.ref}` }))} />
+    </AdminCard>
+    <AdminCard title="Or fill in a new member" className="max-w-3xl">
       <ActionForm action={createMemberAction} submitLabel="Create member">
         <div className="grid gap-4 md:grid-cols-2">
           <TextField tone="light" label="First name" name="firstName" required />
@@ -45,5 +55,6 @@ async function Form() {
         <Checkbox tone="light" name="sendInvitation" defaultChecked label="Send activation invitation now" description="Without an email provider configured, you'll get a one-time link to share securely." />
       </ActionForm>
     </AdminCard>
+    </>
   );
 }

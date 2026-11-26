@@ -44,6 +44,14 @@ const schema = z.object({
   // Admin > Sales > Payment links: the website's address and its SHOP_ADMIN_KEY (club-joia-300-next app/api/staff)
   SHOP_API_URL: z.string().optional(),
   SHOP_ADMIN_KEY: z.string().optional(),
+  /**
+   * Members sign in on the website (club-joia-300-next /login), not here: MEMBER_APP_URL is its
+   * address (members' activation and password reset links go there), MEMBER_API_KEY the key it calls
+   * /api/member-app/* with (Authorization: Bearer). Same MEMBER_API_KEY in the website's .env.
+   * Unset MEMBER_APP_URL: member links use NEXT_PUBLIC_APP_URL. Unset MEMBER_API_KEY: the API answers 503.
+   */
+  MEMBER_APP_URL: z.preprocess((v) => (v === "" ? undefined : v), z.url().optional()),
+  MEMBER_API_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(32, "MEMBER_API_KEY must be at least 32 characters").optional()),
 
   /**
    * Encrypts the authenticator-app secrets of admin accounts (MFA). At least 32 characters, e.g.

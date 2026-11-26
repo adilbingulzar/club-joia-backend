@@ -63,6 +63,11 @@ export function paymentLinksConfigured(): boolean {
 }
 
 // one call of the website's app/api/staff
+/** One call to the website's staff API (app/api/staff) with SHOP_ADMIN_KEY; its { error } becomes an AppError. */
+export async function shopApi<T>(action: string, body: unknown): Promise<T> {
+  return call<T>(action, body);
+}
+
 async function call<T>(action: string, body: unknown): Promise<T> {
   const { url, key } = site();
   let res: Response;

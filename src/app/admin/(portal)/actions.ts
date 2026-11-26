@@ -28,6 +28,7 @@ import {
 import { updateSettings } from "@/services/settings.service";
 import { sendTestEmail } from "@/services/email-test.service";
 import { cancelPaymentLink, createPaymentLink } from "@/services/payment-links.service";
+import { makeMemberFromOrder } from "@/services/sales-member.service";
 import { emailSchema } from "@/validators/auth";
 import { addIpAllowlistEntry, removeIpAllowlistEntry } from "@/services/ip-allowlist.service";
 import { changeRole, createStaff, resendStaffInvitation, setStaffStatus, updateStaffContact } from "@/services/staff.service";
@@ -479,6 +480,22 @@ export async function createPaymentLinkAction(_p: AdminFormState, form: FormData
     revalidatePath("/admin/payment-links");
     const mail = sendEmail === "on" ? (made.emailed ? "&emailed=1" : "&emailed=0") : "";
     return done("Payment link created.", { redirect: "/admin/payment-links?made=" + encodeURIComponent(made.ref) + mail });
+  });
+}
+
+/** Admin > Sales "Make member": the order's buyer as a member, with its tier and tickets, and the invitation. */
+export async function makeMemberAction(ref: string) {
+  return authedAction(z.string().min(1).max(64), ref, async (actor, r) => {
+    const m = await makeMemberFromOrder(actor, r);
+    revalidatePath("/admin/sales", "layout");
+    revalidatePath("/admin/members", "layout");
+    const tickets = `${m.tickets} ticket${m.tickets === 1 ? "" : "s"}`;
+    return done(
+      (m.newMember ? `Member ${m.membershipNumber} made with ${tickets}.` : `Added to member ${m.membershipNumber}: ${tickets}.`) +
+        (m.invitation ? (m.invitation.delivered ? " Invitation emailed." : "") : m.newMember ? "" : " Already signed up, no invitation needed.") +
+        (m.notes.length ? ` Note: ${m.notes.join("; ")}.` : ""),
+      { link: m.invitation && !m.invitation.delivered ? m.invitation.link : undefined, href: { url: `/admin/members/${m.memberId}`, label: "Open member" } },
+    );
   });
 }
 

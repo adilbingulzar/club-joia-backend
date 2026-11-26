@@ -88,7 +88,12 @@ const ADMIN: Permission[] = [
 
 // sees the website's sales, pre-registrations and visits in the admin, and makes payment links for
 // buyers (only theirs); no downloads
-const SALES_VIEWER: Permission[] = ["sales:view", "visits:view", "sales:links", "admin:access"];
+// Sales team: sales, website visits, payment links, and the members they make from sales ("Make member"),
+// with everything on a member's page (each change is in the audit log with who made it).
+const SALES_VIEWER: Permission[] = [
+  "sales:view", "visits:view", "sales:links", "admin:access",
+  "members:view", "members:manage", "memberships:manage", "tickets:manage",
+];
 
 const SUPER_ADMIN: Permission[] = [...ADMIN, "staff:manage", "settings:manage", "events:manage"];
 

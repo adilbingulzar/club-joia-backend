@@ -3,7 +3,7 @@ import { z } from "zod";
 export const PASSWORD_MIN = 12;
 
 export const emailSchema = z
-  .string()
+  .string({ error: "Enter a valid email address." })
   .trim()
   .toLowerCase()
   .max(254)

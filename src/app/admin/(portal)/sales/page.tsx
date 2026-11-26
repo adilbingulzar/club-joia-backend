@@ -10,6 +10,8 @@ import { BarList, ColumnChart, SegmentedBar } from "@/components/admin/sales-cha
 import { Delta, Empty, OrderStatusBadge, SalesTabs, TableView } from "@/components/admin/sales-parts";
 import { LoadingSkeleton } from "@/components/joia/states";
 import { buttonClasses } from "@/components/ui/button-styles";
+import { ActionButton } from "@/components/admin/action-controls";
+import { makeMemberAction } from "../actions";
 import { isFiltered, ORDER_STATUSES, PER_PAGE, previousPeriod, RANGES, readSalesFilters, salesQuery, type SalesFilters } from "@/lib/sales/filters";
 import { count, dateTime, dayLabel, itemsText, money, orderStatus, percent } from "@/lib/sales/format";
 import { revenueSeries } from "@/lib/sales/series";
@@ -346,8 +348,40 @@ async function Sales({ searchParams }: { searchParams: Promise<SP> }) {
           },
           { header: "Amount", cell: (o) => <span className="whitespace-nowrap tabular-nums">{money(o.amount, o.currency)}</span>, className: "text-right" },
           { header: "Status", cell: (o) => <OrderStatusBadge status={o.status} /> },
+          {
+            header: "Member",
+            cell: (o) =>
+              o.memberId ? (
+                can(actor.role, "members:view") ? (
+                  <Link href={`/admin/members/${o.memberId}`} className="whitespace-nowrap text-xs hover:text-ruby">Member →</Link>
+                ) : (
+                  <span className="text-xs text-black/55">Member</span>
+                )
+              ) : o.status === "paid" && can(actor.role, "members:manage") ? (
+                <MakeMemberButton orderRef={o.ref} buyer={o.buyer.name} />
+              ) : (
+                <span className="text-xs text-black/35">—</span>
+              ),
+          },
         ]}
       />
     </>
+  );
+}
+
+/** "Make member": the paid order's buyer as a member with its tier and tickets, and the invitation. */
+function MakeMemberButton({ orderRef, buyer }: { orderRef: string; buyer: string }) {
+  return (
+    <ActionButton
+      run={makeMemberAction.bind(null, orderRef)}
+      label="Make member"
+      size="sm"
+      confirm={{
+        title: "Make " + (buyer || "this buyer") + " a member?",
+        description: "Makes the member with this order's tier and tickets, or adds them to the member with this email, and emails the invitation to sign in on the website.",
+        confirmLabel: "Make member",
+        cancelLabel: "Not now",
+      }}
+    />
   );
 }

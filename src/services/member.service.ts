@@ -166,7 +166,8 @@ export async function listMembers(actor: Actor, query: MemberListQuery = {}) {
   const [rows, total] = await Promise.all([
     db.member.findMany({
       where,
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      // newest first (then by id, so pages stay stable when two were made at the same moment)
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: {
@@ -349,9 +350,14 @@ export async function anonymizeMember(actor: Actor, memberId: string) {
     });
     await tx.session.updateMany({ where: { userId: member.userId, revokedAt: null }, data: { revokedAt: new Date() } });
     await tx.pushSubscription.deleteMany({ where: { userId: member.userId } });
-    await tx.ticket.updateMany({ where: { memberId, status: "ACTIVE" }, data: { status: "REVOKED", revokedAt: new Date(), revokeReason: "Member erased" } });
-    await tx.membership.updateMany({ where: { memberId, status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } }, data: { status: "CANCELLED" } });
-    await recordAudit(actor, { action: "member.anonymize", entityType: "member", entityId: memberId }, tx);
+    const tickets = await tx.ticket.updateMany({ where: { memberId, status: "ACTIVE" }, data: { status: "REVOKED", revokedAt: new Date(), revokeReason: "Member erased" } });
+    const memberships = await tx.membership.updateMany({ where: { memberId, status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } }, data: { status: "CANCELLED" } });
+    // who erased whom: the actor, and the membership number (kept on the record; the name and email are gone)
+    await recordAudit(
+      actor,
+      { action: "member.anonymize", entityType: "member", entityId: memberId, before: { membershipNumber: member.membershipNumber }, after: { ticketsRevoked: tickets.count, membershipsCancelled: memberships.count } },
+      tx,
+    );
   });
   if (member.profilePhotoKey) await deleteStoredObject(member.profilePhotoKey).catch(() => {});
 }

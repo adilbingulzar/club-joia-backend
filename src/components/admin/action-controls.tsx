@@ -52,7 +52,8 @@ export function ActionForm({
         </Link>
       )}
       {children}
-      <Button type="submit" variant={submitVariant} size="sm" loading={pending}>
+      {/* in a grid form: its own row, at the start (a grid cell can be narrower than the label) */}
+      <Button type="submit" variant={submitVariant} size="sm" loading={pending} className="col-span-full justify-self-start">
         {pending ? "Saving" : submitLabel}
       </Button>
     </form>

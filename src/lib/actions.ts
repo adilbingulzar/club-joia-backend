@@ -26,13 +26,31 @@ export async function authedAction<S extends z.ZodType, T>(
   }
 }
 
+// "tierId" → "Tier", "emergencyContactName" → "Emergency contact name"
+function fieldLabel(key: string): string {
+  const words = key.replace(/Id$/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * A field left empty arrives as undefined (formToObject), which Zod reports as "Invalid input:
+ * expected string, received undefined"; staff and members get "<Field> is required." instead.
+ */
+function readableMessage(issue: z.core.$ZodIssue): string {
+  if (issue.code === "invalid_type" && /received undefined$/.test(issue.message)) {
+    const key = String(issue.path[issue.path.length - 1] ?? "");
+    return key ? `${fieldLabel(key)} is required.` : "Please fill in all required fields.";
+  }
+  return issue.message;
+}
+
 export function validationError(error: z.ZodError): AppError {
   const fieldErrors: Record<string, string[]> = {};
   for (const issue of error.issues) {
     const key = issue.path.join(".") || "_form";
-    (fieldErrors[key] ??= []).push(issue.message);
+    (fieldErrors[key] ??= []).push(readableMessage(issue));
   }
-  const first = error.issues[0]?.message ?? "Please check the form.";
+  const first = error.issues[0] ? readableMessage(error.issues[0]) : "Please check the form.";
   return new AppError("VALIDATION", first, fieldErrors);
 }
 

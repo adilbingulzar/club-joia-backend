@@ -289,6 +289,8 @@ export type SalesOrderRow = {
   error: string | null;
   /** The agency (seller) code the buyer entered on the order page; null when none. */
   agencyCode: string | null;
+  /** The member made from this order (Admin > Sales "Make member"), or null. */
+  memberId: string | null;
 };
 
 function orderRow(o: Row): SalesOrderRow {
@@ -306,10 +308,11 @@ function orderRow(o: Row): SalesOrderRow {
     tickets: json<string[]>(o.tickets, []).length,
     error: o.error ? String(o.error) : null,
     agencyCode: o.agency_code ? String(o.agency_code) : null,
+    memberId: o.member_id ? String(o.member_id) : null,
   };
 }
 
-const BASE_COLUMNS = "o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at";
+const BASE_COLUMNS = "o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at, o.member_id";
 async function listColumns(): Promise<string> {
   return BASE_COLUMNS + ((await hasAgencyCode()) ? ", o.agency_code" : "");
 }
@@ -348,7 +351,7 @@ export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrd
   requirePermission(actor, "sales:view");
   let o: Row | undefined;
   try {
-    o = (await query(`SELECT ${await listColumns()}, o.member_id, o.pay_id, o.pay_status, o.fulfilled_at, o.updated_at FROM shop_orders o WHERE o.ref = ?`, [ref.slice(0, 64)]))[0];
+    o = (await query(`SELECT ${await listColumns()}, o.pay_id, o.pay_status, o.fulfilled_at, o.updated_at FROM shop_orders o WHERE o.ref = ?`, [ref.slice(0, 64)]))[0];
   } catch (e) {
     if (missingTable(e)) return null;
     throw e;
@@ -404,6 +407,35 @@ export async function getSalesOrder(actor: Actor, ref: string): Promise<SalesOrd
       : null,
     ticketList: tickets.map((t) => ({ number: t.ticketNumber, code: t.ticketType.code, name: t.ticketType.name, status: t.status })),
   };
+}
+
+/** A paid order whose buyer isn't a member yet ("Make member" in Admin > Sales and on the New member page). */
+export type OrderWithoutMember = { ref: string; name: string; email: string; items: SalesOrderItem[]; amount: number; currency: string; paidAt: Date | null };
+
+/** The paid orders without a member yet, newest paid first. */
+export async function listOrdersWithoutMember(actor: Actor, limit = 300): Promise<OrderWithoutMember[]> {
+  requirePermission(actor, "members:manage");
+  try {
+    const rows = await query(
+      `SELECT o.ref, o.email, o.buyer, o.items, o.amount, o.currency, o.paid_at FROM shop_orders o
+       WHERE o.status = 'paid' AND o.member_id IS NULL ORDER BY COALESCE(o.paid_at, o.created_at) DESC, o.id DESC LIMIT ${Math.min(Math.max(Math.floor(limit), 1), 1000)}`,
+    );
+    return rows.map((o) => {
+      const buyer = json<Record<string, string>>(o.buyer, {});
+      return {
+        ref: String(o.ref),
+        name: ((buyer.firstName || "") + " " + (buyer.lastName || "")).trim(),
+        email: buyer.email || String(o.email || ""),
+        items: json<SalesOrderItem[]>(o.items, []).map((i) => ({ productId: i.productId, name: i.name, quantity: num(i.quantity), price: num(i.price), tier: i.tier })),
+        amount: num(o.amount),
+        currency: String(o.currency || CURRENCY),
+        paidAt: o.paid_at ? new Date(o.paid_at) : null,
+      };
+    });
+  } catch (e) {
+    if (missingTable(e)) return [];
+    throw e;
+  }
 }
 
 export type PreRegistration = {

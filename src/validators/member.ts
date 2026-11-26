@@ -56,8 +56,8 @@ export const privacySchema = z.object({
 
 /** Admin create/edit (superset of member-editable fields). */
 export const adminMemberSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required.").max(60),
-  lastName: z.string().trim().min(1, "Last name is required.").max(60),
+  firstName: z.string({ error: "First name is required." }).trim().min(1, "First name is required.").max(60),
+  lastName: z.string({ error: "Last name is required." }).trim().min(1, "Last name is required.").max(60),
   email: emailSchema,
   displayName: optionalText(60),
   mobile: phone,
@@ -74,7 +74,7 @@ export const adminMemberSchema = z.object({
 });
 
 export const adminCreateMemberSchema = adminMemberSchema.extend({
-  tierId: z.string().min(1, "Choose a membership tier."),
+  tierId: z.string({ error: "Choose a membership tier." }).min(1, "Choose a membership tier."),
   homeChapterId: z.string().optional(),
   sendInvitation: z.stringbool().default(true),
 });

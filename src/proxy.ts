@@ -9,8 +9,10 @@ import { contentSecurityPolicy, newNonce } from "@/lib/security/csp";
  */
 const PUBLIC_PATHS = ["/login", "/admin/login", "/activate", "/forgot-password", "/reset-password", "/offline", "/legal"];
 
-// The door scanner API, left out of the IP allowlist.
+// Left out of the IP allowlist, each with its own key: the door scanner API (src/lib/scan-api.ts),
+// and the member app API the website's server calls (src/lib/member-api.ts).
 const SCAN_API = /^\/api\/scan(\/|$)/;
+const MEMBER_API = /^\/api\/member-app\//;
 
 // Paths the sign-in redirect looks at: not API routes (they authorise themselves), Next internals
 // or static/public files.
@@ -31,7 +33,8 @@ export async function proxy(request: NextRequest) {
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
   // the scanner API (/api/scan/*) is open to every address: scanners on mobile data change address, and it has its own key (src/lib/scan-api.ts)
-  const ipAllowed = SCAN_API.test(request.nextUrl.pathname) || (await requestAllowed(request.headers));
+  // the member app API (/api/member-app/*) is called by the website's server for members anywhere, with MEMBER_API_KEY
+  const ipAllowed = SCAN_API.test(request.nextUrl.pathname) || MEMBER_API.test(request.nextUrl.pathname) || (await requestAllowed(request.headers));
   const res = answer(request, { request: { headers } }, ipAllowed);
   if (!request.nextUrl.pathname.startsWith("/api/files/")) res.headers.set("Content-Security-Policy", policy);
   return res;

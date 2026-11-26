@@ -169,7 +169,7 @@ async function Detail({ params }: Pick<PageProps<"/admin/members/[id]">, "params
               </p>
             )}
             {can(actor.role, "memberships:manage") && !anonymized && (
-              <ActionForm action={entitlementOverrideAction} submitLabel="Apply override" className="grid gap-3 md:grid-cols-4 md:items-end">
+              <ActionForm action={entitlementOverrideAction} submitLabel="Apply override" className="grid gap-3 sm:grid-cols-2 sm:items-end">
                 <input type="hidden" name="memberId" value={m.id} />
                 <SelectField tone="light" label="Entitlement" name="code" options={catalogue.map((e) => ({ value: e.code, label: e.name }))} />
                 <SelectField tone="light" label="Action" name="mode" options={[{ value: "grant", label: "Grant" }, { value: "revoke", label: "Revoke" }, { value: "clear", label: "Clear override" }]} />

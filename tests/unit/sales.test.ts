@@ -27,7 +27,10 @@ describe("sales access", () => {
     expect(can("SALES_VIEWER", "sales:links")).toBe(true);
     expect(can("SUPER_ADMIN", "sales:links")).toBe(true);
     for (const role of ["MEMBER", "CHECK_IN_STAFF", "CONCIERGE"] as const) expect(can(role, "sales:links")).toBe(false);
-    for (const p of PERMISSIONS.filter((x) => !["sales:view", "visits:view", "sales:links", "admin:access"].includes(x))) expect(can("SALES_VIEWER", p)).toBe(false);
+    // and the members made from sales: the Members pages, with everything on a member's page
+    for (const p of ["members:view", "members:manage", "memberships:manage", "tickets:manage"] as const) expect(can("SALES_VIEWER", p)).toBe(true);
+    const salesTeam = ["sales:view", "visits:view", "sales:links", "admin:access", "members:view", "members:manage", "memberships:manage", "tickets:manage"];
+    for (const p of PERMISSIONS.filter((x) => !salesTeam.includes(x))) expect(can("SALES_VIEWER", p)).toBe(false);
     expect(homePathFor("SALES_VIEWER")).toBe("/admin/sales");
     expect(mfaRequired("SALES_VIEWER")).toBe(true);
     expect(STAFF_ROLES).toContain("SALES_VIEWER");
@@ -95,7 +98,7 @@ describe("sales CSV", () => {
       ref: "CJ1", status: "paid", createdAt: new Date("2026-11-09T06:00:00Z"), paidAt: new Date("2026-11-09T06:05:00Z"),
       buyer: { name: '=HYPERLINK("x")', email: "a@b.co", mobile: "+92 300", country: "pakistan" },
       items: [{ productId: "ruby-red/3-days", name: "Ruby Red, 3 days", quantity: 2, price: 8000 }],
-      amount: 16000, currency: "AED", tickets: 8, error: null, agencyCode: "AGENCY 7",
+      amount: 16000, currency: "AED", tickets: 8, error: null, agencyCode: "AGENCY 7", memberId: null,
     };
     const lines = ordersCsv([order]).replace("﻿", "").trim().split("\r\n");
     expect(lines).toHaveLength(2);

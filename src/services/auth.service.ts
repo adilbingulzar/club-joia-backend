@@ -235,14 +235,16 @@ export async function peekAuthToken(token: string, type: AuthTokenType) {
   if (!token || token.length > 200) return null;
   const row = await db.authToken.findUnique({
     where: { tokenHash: tokenHash(token) },
-    include: { user: { select: { email: true, name: true } } },
+    include: { user: { select: { email: true, name: true, role: true } } },
   });
   if (!row || row.type !== type || row.usedAt || row.expiresAt <= new Date()) return null;
-  return { email: row.user.email, name: row.user.name };
+  return { email: row.user.email, name: row.user.name, role: row.user.role };
 }
 
-function appLink(path: string) {
-  return new URL(path, env().NEXT_PUBLIC_APP_URL).toString();
+/** A link in an email: members' go to the website (MEMBER_APP_URL), staff's to this app. */
+function appLink(path: string, role: Role) {
+  const base = role === "MEMBER" ? (env().MEMBER_APP_URL ?? env().NEXT_PUBLIC_APP_URL) : env().NEXT_PUBLIC_APP_URL;
+  return new URL(path, base).toString();
 }
 
 /** Issue an activation link and (attempt to) email it. Returns the link for admin hand-off. */
@@ -252,7 +254,7 @@ export async function issueActivation(userId: string) {
     throw new AppError("INVALID_STATE", "This account is already activated.");
   }
   const token = await issueAuthToken(userId, "ACTIVATION", ACTIVATION_TTL_MS);
-  const link = appLink(`/activate?token=${encodeURIComponent(token)}`);
+  const link = appLink(`/activate?token=${encodeURIComponent(token)}`, user.role);
   const delivery = await sendEmail({ to: user.email, ...activationEmail(user.name, link) });
   return { link, delivered: delivery.delivered };
 }
@@ -302,7 +304,7 @@ export async function requestPasswordReset(rawEmail: string, meta: RequestMeta) 
   const user = await db.user.findUnique({ where: { email } });
   if (!user || user.status !== "ACTIVE") return;
   const token = await issueAuthToken(user.id, "PASSWORD_RESET", RESET_TTL_MS);
-  await sendEmail({ to: user.email, ...passwordResetEmail(user.name, appLink(`/reset-password?token=${encodeURIComponent(token)}`)) });
+  await sendEmail({ to: user.email, ...passwordResetEmail(user.name, appLink(`/reset-password?token=${encodeURIComponent(token)}`, user.role)) });
   await recordAudit({ userId: user.id, ...meta }, { action: "auth.password_reset_requested", entityType: "user", entityId: user.id });
 }
 
@@ -311,7 +313,7 @@ export async function issuePasswordResetLink(actor: Actor, userId: string) {
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
   if (user.status !== "ACTIVE") throw new AppError("INVALID_STATE", "Only active accounts can reset a password.");
   const token = await issueAuthToken(user.id, "PASSWORD_RESET", RESET_TTL_MS);
-  const link = appLink(`/reset-password?token=${encodeURIComponent(token)}`);
+  const link = appLink(`/reset-password?token=${encodeURIComponent(token)}`, user.role);
   const delivery = await sendEmail({ to: user.email, ...passwordResetEmail(user.name, link) });
   await recordAudit(actor, { action: "auth.password_reset_issued", entityType: "user", entityId: user.id });
   return { link, delivered: delivery.delivered };
