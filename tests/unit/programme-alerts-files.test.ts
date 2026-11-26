@@ -3,6 +3,8 @@ import { isProgrammeIconKey, resolveProgrammeIcon } from "@/domain/programme-ico
 import { selectNewRequestRecipients, type AlertCandidate } from "@/domain/concierge";
 import { storedImageUrl } from "@/lib/files";
 import { STAFF_ROLE_VALUES, staffSchema } from "@/validators/admin";
+import { can, mfaRequired } from "@/lib/auth/permissions";
+import { ADMIN_NAV } from "@/components/admin/admin-nav";
 
 describe("programme icons", () => {
   const icon = (title: string, category = "OTHER", explicit?: string | null) => resolveProgrammeIcon({ title, category, icon: explicit });
@@ -66,10 +68,19 @@ describe("uploaded images", () => {
 });
 
 describe("staff roles offered in the admin", () => {
-  it("are only super admin and sales viewer", () => {
-    expect([...STAFF_ROLE_VALUES].sort()).toEqual(["SALES_VIEWER", "SUPER_ADMIN"]);
+  it("are every staff role, not member", () => {
+    expect([...STAFF_ROLE_VALUES].sort()).toEqual(["ADMIN", "BACKOFFICE", "CHECK_IN_STAFF", "CONCIERGE", "SALES_VIEWER", "SUPER_ADMIN"]);
     const base = { name: "Sam Staff", email: "sam@joia.test" };
-    expect(staffSchema.safeParse({ ...base, role: "SALES_VIEWER" }).success).toBe(true);
-    expect(staffSchema.safeParse({ ...base, role: "CONCIERGE" }).success).toBe(false);
+    expect(staffSchema.safeParse({ ...base, role: "BACKOFFICE" }).success).toBe(true);
+    expect(staffSchema.safeParse({ ...base, role: "CONCIERGE" }).success).toBe(true);
+    expect(staffSchema.safeParse({ ...base, role: "MEMBER" }).success).toBe(false);
+  });
+
+  it("give backoffice its seven menu items, without downloads or setup", () => {
+    const menu = ADMIN_NAV.filter((n) => can("BACKOFFICE", n.permission)).map((n) => n.label);
+    expect(menu).toEqual(["Sales", "Payment links", "Members", "Tickets", "Concierge", "Notifications"]);
+    expect(can("BACKOFFICE", "scan:validate")).toBe(true); // Open scanner
+    for (const p of ["sales:export", "visits:view", "audit:view", "staff:manage", "settings:manage", "dashboard:view"] as const) expect(can("BACKOFFICE", p)).toBe(false);
+    expect(mfaRequired("BACKOFFICE")).toBe(true);
   });
 });

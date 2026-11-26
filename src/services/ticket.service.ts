@@ -1,6 +1,7 @@
 import "server-only";
 import { db, type Tx } from "@/lib/db";
-import { AppError, notFound } from "@/lib/errors";
+import { AppError, forbidden, notFound } from "@/lib/errors";
+import { can } from "@/lib/auth/permissions";
 import { humanCode, randomToken } from "@/lib/crypto";
 import { pickCurrentMembership } from "@/domain/membership";
 import type { EntryPolicy, TicketStatus } from "@/generated/prisma/enums";
@@ -257,7 +258,8 @@ export async function getTicketAdmin(actor: Actor, id: string) {
 }
 
 export async function listMemberTicketsAdmin(actor: Actor, memberId: string) {
-  requirePermission(actor, "tickets:view");
+  // the member page's tickets: also for the sales viewer, who issues tickets there (tickets:manage) without the Tickets page
+  if (!can(actor.role, "tickets:view") && !can(actor.role, "tickets:manage")) throw forbidden();
   const tickets = await db.ticket.findMany({
     where: { memberId },
     orderBy: { validFrom: "asc" },

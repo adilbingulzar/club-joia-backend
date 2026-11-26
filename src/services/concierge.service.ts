@@ -211,7 +211,7 @@ export async function assignRequest(actor: Actor, requestId: string, assigneeId:
   requirePermission(actor, "concierge:manage");
   if (assigneeId) {
     const assignee = await db.user.findUnique({ where: { id: assigneeId } });
-    if (!assignee || !["CONCIERGE", "ADMIN", "SUPER_ADMIN"].includes(assignee.role) || assignee.status !== "ACTIVE") {
+    if (!assignee || !["CONCIERGE", "BACKOFFICE", "ADMIN", "SUPER_ADMIN"].includes(assignee.role) || assignee.status !== "ACTIVE") {
       throw new AppError("VALIDATION", "Assign to an active concierge team member.");
     }
   }
@@ -287,7 +287,7 @@ export async function listRequestsStaff(actor: Actor, query: ConciergeQuery = {}
 
 export async function listConciergeTeam() {
   return db.user.findMany({
-    where: { role: { in: ["CONCIERGE", "ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" },
+    where: { role: { in: ["CONCIERGE", "BACKOFFICE", "ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" },
     select: { id: true, name: true, role: true },
     orderBy: { name: "asc" },
   });

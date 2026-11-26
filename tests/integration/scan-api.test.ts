@@ -36,11 +36,12 @@ describe("scanner API", () => {
     expect(await wrong.json()).toEqual({ error: "Missing or wrong API key." });
   });
 
-  it("blocks an address after 20 wrong keys, even with the right key", async () => {
+  it("blocks wrong keys from an address after 20, but the right key still works", async () => {
     const ip = "203.0.113.30";
     for (let i = 0; i < 20; i++) expect((await listRoute(req("/api/scan/tickets", { key: "wrong", ip }))).status).toBe(401);
     expect((await listRoute(req("/api/scan/tickets", { key: "wrong", ip }))).status).toBe(429);
-    expect((await listRoute(req("/api/scan/tickets", { ip }))).status).toBe(429);
+    // the door scanner behind the same address keeps working
+    expect((await listRoute(req("/api/scan/tickets", { ip }))).status).toBe(200);
     // right keys don't use up the allowance
     for (let i = 0; i < 25; i++) expect((await listRoute(req("/api/scan/tickets", { ip: "203.0.113.31" }))).status).toBe(200);
   });

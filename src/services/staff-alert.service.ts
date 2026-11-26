@@ -45,7 +45,7 @@ export async function alertNewConciergeRequest(requestId: string) {
   try {
     const request = await db.conciergeRequest.findUnique({ where: { id: requestId }, select: { id: true, reference: true, category: true, subject: true, priority: true } });
     if (!request) return;
-    const candidates = (await db.user.findMany({ where: { role: { in: ["CONCIERGE", "ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" }, select: recipientSelect }))
+    const candidates = (await db.user.findMany({ where: { role: { in: ["CONCIERGE", "BACKOFFICE", "ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" }, select: recipientSelect }))
       .map((u) => ({ ...u, conciergeCategories: conciergeCategoryList(u.conciergeCategories) }));
     const recipients = selectNewRequestRecipients(candidates, request.category);
     const category = CONCIERGE_CATEGORY_LABELS[request.category];

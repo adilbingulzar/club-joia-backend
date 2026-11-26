@@ -33,6 +33,7 @@ enum Role {
   ADMIN
   SUPER_ADMIN
   SALES_VIEWER
+  BACKOFFICE
 }
 
 enum UserStatus {

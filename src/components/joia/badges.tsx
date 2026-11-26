@@ -47,6 +47,6 @@ export function TierBadge({ name, theme, className }: { name: string; theme: str
 }
 
 export function PermissionBadge({ role, className }: { role: Role; className?: string }) {
-  const tone: Record<Role, Tone> = { MEMBER: "neutral", CHECK_IN_STAFF: "info", CONCIERGE: "success", ADMIN: "warning", SUPER_ADMIN: "ruby", SALES_VIEWER: "info" };
+  const tone: Record<Role, Tone> = { MEMBER: "neutral", CHECK_IN_STAFF: "info", CONCIERGE: "success", ADMIN: "warning", SUPER_ADMIN: "ruby", SALES_VIEWER: "info", BACKOFFICE: "warning" };
   return <StatusBadge status={role} label={ROLE_LABELS[role]} tone={tone[role]} className={className} />;
 }

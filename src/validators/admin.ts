@@ -22,10 +22,9 @@ export const ENTRY_POLICIES = ["SINGLE_ENTRY", "DAILY_ENTRY", "MULTI_ENTRY"] as 
 export const NOTIFICATION_TYPES = ["ANNOUNCEMENT", "PROGRAMME", "TICKET", "CONCIERGE", "TRANSPORT", "MEMBERSHIP", "SYSTEM"] as const;
 export const TARGET_TYPES = ["ALL_MEMBERS", "TIER", "EVENT", "MEMBER"] as const;
 /**
- * Roles a super admin can give from Admin → Staff. For now only super admins and sales viewers;
- * the other staff roles still exist (Role enum, permissions) and can be offered again by adding them here.
+ * Roles a super admin can give from Admin → Staff (what each sees: src/lib/auth/permissions.ts).
  */
-export const STAFF_ROLE_VALUES = ["SUPER_ADMIN", "SALES_VIEWER"] as const;
+export const STAFF_ROLE_VALUES = ["SUPER_ADMIN", "ADMIN", "BACKOFFICE", "SALES_VIEWER", "CONCIERGE", "CHECK_IN_STAFF"] as const;
 
 export const assignMembershipSchema = z.object({
   memberId: z.string().min(1),

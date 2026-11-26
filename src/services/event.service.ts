@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { AppError, notFound } from "@/lib/errors";
+import { AppError, forbidden, notFound } from "@/lib/errors";
+import { can } from "@/lib/auth/permissions";
 import { dateOnly, eachDay, parseDateOnly } from "@/lib/time";
 import type { EventStatus } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
@@ -62,7 +63,8 @@ export async function getFeaturedEvent(now = new Date()) {
 // ─── Admin ──────────────────────────────────────────────────────────────────
 
 export async function listEventsAdmin(actor: Actor) {
-  requirePermission(actor, "programme:manage");
+  // the programme and events pages, and the event picker on the tickets page (Backoffice has tickets, not programme)
+  if (!can(actor.role, "programme:manage") && !can(actor.role, "tickets:view")) throw forbidden();
   const events = await db.event.findMany({
     orderBy: { startDate: "desc" },
     include: {

@@ -13,7 +13,7 @@ import { requirePermission, type Actor } from "./context";
  * (created_by = users.id) and gives the link /shop/link/<ref>, payable for 1 to 5 days, with an optional fixed discount, and can
  * email it to the buyer. After payment the order is fulfilled as any website order (member,
  * tickets, confirmation email).
- * Sales viewers see and cancel only their own links; admins and super admins all of them.
+ * Sales viewers see and cancel only their own links; backoffice, admins and super admins all of them.
  */
 
 export type LinkCatalog = {
@@ -40,7 +40,7 @@ export type LinkBuyer = {
 };
 
 function seesAll(actor: Actor): boolean {
-  return actor.role === "SUPER_ADMIN" || actor.role === "ADMIN";
+  return actor.role === "SUPER_ADMIN" || actor.role === "ADMIN" || actor.role === "BACKOFFICE";
 }
 
 function site(): { url: string; key: string } {
