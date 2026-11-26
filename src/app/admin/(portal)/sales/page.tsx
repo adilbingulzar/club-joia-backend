@@ -346,7 +346,16 @@ async function Sales({ searchParams }: { searchParams: Promise<SP> }) {
               </span>
             ),
           },
-          { header: "Amount", cell: (o) => <span className="whitespace-nowrap tabular-nums">{money(o.amount, o.currency)}</span>, className: "text-right" },
+          {
+            header: "Amount",
+            cell: (o) => (
+              <span className="whitespace-nowrap tabular-nums">
+                {money(o.amount, o.currency)}
+                {o.discount > 0 && <span className="block text-xs text-black/50">Discount {money(o.discount, o.currency)}</span>}
+              </span>
+            ),
+            className: "text-right",
+          },
           { header: "Status", cell: (o) => <OrderStatusBadge status={o.status} /> },
           {
             header: "Member",

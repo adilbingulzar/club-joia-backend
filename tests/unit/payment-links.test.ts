@@ -57,8 +57,16 @@ describe("payment links", () => {
     expect(calls[0]).toEqual({
       url: "https://site.test/api/staff/order",
       auth: "Bearer " + "k".repeat(32),
-      body: { createdBy: "sv1", buyer, items: [{ id: "ruby-red/sat", quantity: 1 }], linkDays: 2, sendEmail: true },
+      body: { createdBy: "sv1", buyer, items: [{ id: "ruby-red/sat", quantity: 1 }], linkDays: 2, discount: 0, sendEmail: true },
     });
+    expect(m.audits).toEqual(["sales.payment_link_created"]);
+  });
+
+  it("sends the discount to the website and keeps it in the audit log", async () => {
+    website(() => [200, { ref: "CJD", url: "https://site.test/shop/link/CJD", amount: 2750, discount: 250, currency: "USD", expiresAt: "2026-11-27T10:00:00Z", emailed: false }]);
+    const made = await svc.createPaymentLink(viewer, buyer, [{ id: "ruby-red/sat", quantity: 1 }], { linkDays: 1, sendEmail: false, discount: 250 });
+    expect((calls[0].body as Record<string, unknown>).discount).toBe(250);
+    expect(made).toMatchObject({ amount: 2750, discount: 250 });
     expect(m.audits).toEqual(["sales.payment_link_created"]);
   });
 
@@ -71,12 +79,15 @@ describe("payment links", () => {
 
   it("lists a sales viewer's own links, and all of them for super admins", async () => {
     const row = { created_at: "2026-11-24T10:00:00Z", buyer: JSON.stringify({ firstName: "Erin", lastName: "Test" }), email: "erin@example.com", items: JSON.stringify([{ name: "Ruby Red, Saturday", quantity: 1 }]), amount: "3000.00", currency: "USD", staff_cancelled_at: null, link_expires_at: "2026-11-25T10:00:00Z", made_by: "Sam", paid_ref: null };
-    m.rows = [[{ n: 2 }], [{ ...row, ref: "CJ1", expired: 0 }, { ...row, ref: "CJ0", expired: 1 }]];
+    // the discount column's check (once), the count, the page
+    m.rows = [[{ 1: 1 }], [{ n: 2 }], [{ ...row, ref: "CJ1", expired: 0, discount: "250.00" }, { ...row, ref: "CJ0", expired: 1, discount: null }]];
     const own = await svc.listPaymentLinks(viewer);
-    expect(m.queries[0].sql).toContain("o.created_by = ?");
-    expect(m.queries[0].params).toEqual(["sv1"]);
-    expect(own.links[0]).toMatchObject({ ref: "CJ1", buyerName: "Erin Test", state: "unpaid", url: "https://site.test/shop/link/CJ1", amount: 3000, expiresAt: new Date("2026-11-25T10:00:00Z") });
-    expect(own.links[1].state).toBe("expired");
+    expect(m.queries[0].sql).toContain("column_name = 'discount'");
+    expect(m.queries[1].sql).toContain("o.created_by = ?");
+    expect(m.queries[1].params).toEqual(["sv1"]);
+    expect(m.queries[2].sql).toContain("o.discount");
+    expect(own.links[0]).toMatchObject({ ref: "CJ1", buyerName: "Erin Test", state: "unpaid", url: "https://site.test/shop/link/CJ1", amount: 3000, discount: 250, expiresAt: new Date("2026-11-25T10:00:00Z") });
+    expect(own.links[1]).toMatchObject({ state: "expired", discount: 0 });
     m.queries = [];
     m.rows = [[{ n: 0 }], []];
     const all = await svc.listPaymentLinks(superAdmin);

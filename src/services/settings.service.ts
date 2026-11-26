@@ -9,7 +9,7 @@ import { requirePermission, type Actor } from "./context";
  * Secrets never live here (they are environment variables).
  */
 export const SETTING_DEFAULTS = {
-  "support.email": "concierge@clubjoia.example",
+  "support.email": "concierge@clubjoia300.com",
   "support.phone": "+971 00 000 0000",
   "support.whatsapp": "",
   "legal.termsUrl": "/legal/terms",

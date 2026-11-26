@@ -100,6 +100,12 @@ async function Order({ params }: Pick<PageProps<"/admin/sales/orders/[ref]">, "p
                     <td className="py-2 text-right tabular-nums">{money(i.price * i.quantity, o.currency)}</td>
                   </tr>
                 ))}
+                {o.discount > 0 && (
+                  <tr>
+                    <td className="py-2" colSpan={3}>Discount (payment link)</td>
+                    <td className="py-2 text-right tabular-nums">−{money(o.discount, o.currency)}</td>
+                  </tr>
+                )}
                 <tr className="font-medium">
                   <td className="py-2" colSpan={3}>Total</td>
                   <td className="py-2 text-right tabular-nums">{money(o.amount, o.currency)}</td>

@@ -112,7 +112,7 @@ async function main() {
         sample: true,
         tagline: "Grand Prix Weekend",
         ticketPrefix: "AD26",
-        supportEmail: "concierge@clubjoia.example",
+        supportEmail: "concierge@clubjoia300.com",
         supportPhone: "+971 00 000 0000",
         dressCode: "Smart resort by day, elegant evening wear after sunset. (Sample — to be confirmed.)",
         infoSections: [

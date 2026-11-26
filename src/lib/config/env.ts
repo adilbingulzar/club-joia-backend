@@ -16,7 +16,7 @@ const schema = z.object({
 
   WEB_PUSH_PUBLIC_KEY: z.string().optional(),
   WEB_PUSH_PRIVATE_KEY: z.string().optional(),
-  WEB_PUSH_SUBJECT: z.string().default("mailto:concierge@clubjoia.example"),
+  WEB_PUSH_SUBJECT: z.string().default("mailto:concierge@clubjoia300.com"),
 
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default(".data/uploads"),

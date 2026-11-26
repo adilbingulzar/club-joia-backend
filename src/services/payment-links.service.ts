@@ -10,7 +10,7 @@ import { requirePermission, type Actor } from "./context";
  *
  * Staff fill in the website's checkout form for a buyer; the website (club-joia-300-next
  * app/api/staff, called with SHOP_ADMIN_KEY) books the order in its shop_orders with who made it
- * (created_by = users.id) and gives the link /shop/link/<ref>, payable for 1, 2 or 4 days, and can
+ * (created_by = users.id) and gives the link /shop/link/<ref>, payable for 1 to 5 days, with an optional fixed discount, and can
  * email it to the buyer. After payment the order is fulfilled as any website order (member,
  * tickets, confirmation email).
  * Sales viewers see and cancel only their own links; admins and super admins all of them.
@@ -110,22 +110,25 @@ export async function createPaymentLink(
   actor: Actor,
   buyer: LinkBuyer,
   items: { id: string; quantity: number }[],
-  options: { linkDays: (typeof LINK_DAYS)[number]; sendEmail: boolean } = { linkDays: 1, sendEmail: false },
+  options: { linkDays: (typeof LINK_DAYS)[number]; sendEmail: boolean; discount?: number } = { linkDays: 1, sendEmail: false },
 ) {
   requirePermission(actor, "sales:links");
   if (!items.length) throw new AppError("VALIDATION", "Choose at least one ticket.");
-  const made = await call<{ ref: string; url: string; amount: number; currency: string; expiresAt: string; emailed: boolean }>("order", {
+  const discount = options.discount && options.discount > 0 ? options.discount : 0;
+  const made = await call<{ ref: string; url: string; amount: number; discount?: number; currency: string; expiresAt: string; emailed: boolean }>("order", {
     createdBy: actor.userId,
     buyer,
     items,
     linkDays: options.linkDays,
+    discount,
     sendEmail: options.sendEmail,
   });
   await recordAudit(actor, {
     action: "sales.payment_link_created",
     entityType: "shop_order",
     entityId: made.ref,
-    after: { email: buyer.email, items, amount: made.amount, currency: made.currency, linkDays: options.linkDays, emailed: made.emailed },
+    // who made it is the audit's actor; the discount they gave is kept with the link
+    after: { email: buyer.email, items, amount: made.amount, discount: made.discount ?? discount, currency: made.currency, linkDays: options.linkDays, emailed: made.emailed },
   });
   return made;
 }
@@ -137,6 +140,8 @@ export type PaymentLinkRow = {
   email: string;
   items: { name: string; quantity: number }[];
   amount: number;
+  /** the fixed amount off the tickets (0 = none); amount is after it */
+  discount: number;
   currency: string;
   state: "paid" | "unpaid" | "cancelled" | "expired";
   expiresAt: Date | null;
@@ -162,6 +167,17 @@ function parse<T>(v: unknown, fallback: T): T {
   }
 }
 
+// the website adds shop_orders.discount (club-joia-300-next lib/shop/db.ts) on its first start after the update
+let discountColumn = false;
+export async function hasDiscount(): Promise<boolean> {
+  if (discountColumn) return true;
+  const rows = await db.$queryRawUnsafe<Row[]>(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'discount' LIMIT 1",
+  );
+  discountColumn = rows.length > 0;
+  return discountColumn;
+}
+
 /** Payment links, newest first, a page at a time: the actor's own, or all for admins. */
 export async function listPaymentLinks(actor: Actor, page = 1, pageSize = 25): Promise<{ available: boolean; total: number; page: number; links: PaymentLinkRow[]; all: boolean }> {
   requirePermission(actor, "sales:links");
@@ -171,12 +187,13 @@ export async function listPaymentLinks(actor: Actor, page = 1, pageSize = 25): P
   let total = 0;
   let rows: Row[] = [];
   try {
+    const withDiscount = await hasDiscount();
     const t = await db.$queryRawUnsafe<Row[]>(`SELECT COUNT(*) AS n FROM shop_orders o WHERE ${where}`, ...params);
     total = Number(String(t[0]?.n ?? 0));
     const pages = Math.max(1, Math.ceil(total / pageSize));
     page = Math.min(Math.max(1, Math.floor(page) || 1), pages);
     rows = await db.$queryRawUnsafe<Row[]>(
-      `SELECT o.ref, o.created_at, o.buyer, o.email, o.items, o.amount, o.currency, o.staff_cancelled_at, o.link_expires_at,
+      `SELECT o.ref, o.created_at, o.buyer, o.email, o.items, o.amount${withDiscount ? ", o.discount" : ""}, o.currency, o.staff_cancelled_at, o.link_expires_at,
          (o.link_expires_at IS NOT NULL AND o.link_expires_at <= UTC_TIMESTAMP(3)) AS expired, u.name AS made_by,
          (SELECT p.ref FROM shop_orders p WHERE (p.ref = o.ref OR p.retry_of = o.ref) AND p.status = 'paid' LIMIT 1) AS paid_ref
        FROM shop_orders o LEFT JOIN users u ON u.id = o.created_by
@@ -204,6 +221,7 @@ export async function listPaymentLinks(actor: Actor, page = 1, pageSize = 25): P
         email: String(r.email),
         items: parse<{ name: string; quantity: number }[]>(r.items, []).map((i) => ({ name: String(i.name), quantity: Number(i.quantity) })),
         amount: Number(String(r.amount)),
+        discount: r.discount == null ? 0 : Number(String(r.discount)),
         currency: String(r.currency),
         state: r.paid_ref ? "paid" : r.staff_cancelled_at ? "cancelled" : Number(String(r.expired)) ? "expired" : "unpaid",
         expiresAt: r.link_expires_at ? new Date(r.link_expires_at) : null,

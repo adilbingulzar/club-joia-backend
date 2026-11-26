@@ -51,7 +51,7 @@ async function PaymentLinks({ searchParams }: { searchParams: Promise<SP> }) {
         title="Payment links"
         description={
           (data.all ? "Every payment link made in the admin." : "The payment links you made.") +
-          " Fill in the buyer's details and tickets; the link can be emailed to them and copied for WhatsApp. It can be paid for 1, 2 or 4 days; after payment the buyer gets their tickets and confirmation email as with a website order."
+          " Fill in the buyer's details and tickets; the link can be emailed to them and copied for WhatsApp. It can be paid for 1 to 5 days, with an optional discount; after payment the buyer gets their tickets and confirmation email as with a website order."
         }
         actions={
           on && (
@@ -105,7 +105,15 @@ async function PaymentLinks({ searchParams }: { searchParams: Promise<SP> }) {
             header: "Tickets",
             cell: (l) => <span className="text-xs text-black/70">{l.items.map((i) => i.quantity + " × " + i.name).join(", ")}</span>,
           },
-          { header: "Amount", cell: (l) => <span className="tabular-nums">{money(l.amount, l.currency)}</span> },
+          {
+            header: "Amount",
+            cell: (l) => (
+              <span className="tabular-nums">
+                {money(l.amount, l.currency)}
+                {l.discount > 0 && <span className="block text-xs text-black/50">Discount {money(l.discount, l.currency)}</span>}
+              </span>
+            ),
+          },
           {
             header: "Status",
             cell: (l) => (

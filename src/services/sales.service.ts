@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { ORDER_STATUSES, SALES_TIMEZONE, isDay, type SalesFilters } from "@/lib/sales/filters";
 import { recordAudit } from "./audit.service";
+import { hasDiscount } from "./payment-links.service";
 import { requirePermission, type Actor } from "./context";
 
 /**
@@ -293,6 +294,8 @@ export type SalesOrderRow = {
   memberId: string | null;
   /** the email is a staff account's: no "Make member" */
   staffEmail: boolean;
+  /** a payment link's fixed discount off the tickets (0 = none); amount is after it */
+  discount: number;
 };
 
 function orderRow(o: Row): SalesOrderRow {
@@ -312,6 +315,7 @@ function orderRow(o: Row): SalesOrderRow {
     agencyCode: o.agency_code ? String(o.agency_code) : null,
     memberId: o.member_id ? String(o.member_id) : null,
     staffEmail: Boolean(Number(o.staff_email)),
+    discount: o.discount == null ? 0 : num(o.discount),
   };
 }
 
@@ -319,7 +323,7 @@ function orderRow(o: Row): SalesOrderRow {
 const STAFF_EMAIL = "EXISTS (SELECT 1 FROM users su WHERE su.email = o.email AND su.role <> 'MEMBER')";
 const BASE_COLUMNS = `o.ref, o.status, o.email, o.buyer, o.items, o.amount, o.currency, o.tickets, o.error, o.created_at, o.paid_at, o.member_id, ${STAFF_EMAIL} AS staff_email`;
 async function listColumns(): Promise<string> {
-  return BASE_COLUMNS + ((await hasAgencyCode()) ? ", o.agency_code" : "");
+  return BASE_COLUMNS + ((await hasAgencyCode()) ? ", o.agency_code" : "") + ((await hasDiscount()) ? ", o.discount" : "");
 }
 
 /** The orders matching the filters, newest first (up to 10,000 a page, for the CSV). */

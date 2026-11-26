@@ -461,6 +461,15 @@ const paymentLinkSchema = z.object({
   terms: z.literal("on", { error: "Confirm that the buyer agrees to the terms and conditions." }),
   linkDays: z.preprocess((v) => Number(v ?? 1), z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)], { error: "Choose how long the link is valid." })),
   sendEmail: z.literal("on").optional(),
+  // a fixed amount off the tickets (the website keeps the total at 1 or more); empty = none
+  discount: z.preprocess(
+    (v) => (v == null || String(v).trim() === "" ? 0 : Number(String(v).trim().replace(",", "."))),
+    z
+      .number({ error: "Enter the discount as an amount, e.g. 250." })
+      .min(0, "The discount can't be below 0.")
+      .max(10_000_000, "The discount is too large.")
+      .refine((n) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6, "The discount can have at most 2 decimals."),
+  ),
 });
 
 export async function createPaymentLinkAction(_p: AdminFormState, form: FormData): Promise<AdminFormState> {
@@ -472,10 +481,11 @@ export async function createPaymentLinkAction(_p: AdminFormState, form: FormData
     if (Number.isInteger(quantity) && quantity > 0) items.push({ id: key.slice(4), quantity });
   }
   return authedAction(paymentLinkSchema, formToObject(form), async (actor, d) => {
-    const { linkDays, sendEmail, ...buyer } = d;
+    const { linkDays, sendEmail, discount, ...buyer } = d;
     const made = await createPaymentLink(actor, { ...buyer, gender: buyer.gender ?? "", birthday: buyer.birthday ?? "", over21: true, terms: true }, items, {
       linkDays,
       sendEmail: sendEmail === "on",
+      discount,
     });
     revalidatePath("/admin/payment-links");
     const mail = sendEmail === "on" ? (made.emailed ? "&emailed=1" : "&emailed=0") : "";
