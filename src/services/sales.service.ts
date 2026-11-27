@@ -16,7 +16,13 @@ import { requirePermission, type Actor } from "./context";
  * Days are counted in SHOP_TIMEZONE (Asia/Dubai); amounts in the orders' currency (SHOP_CURRENCY).
  */
 
-const CURRENCY = (process.env.SHOP_CURRENCY || "AED").toUpperCase();
+const CURRENCY = (process.env.SHOP_CURRENCY || "AED").toUpperCase().replace(/[^A-Z]/g, "");
+
+/**
+ * A buyer of a shop selling in USD can pay in AED too (the website's lib/currency.ts): such an
+ * order's amount and prices are in AED. Amounts are never converted: the figures are of one currency
+ * at a time (the Currency filter, the shop's own by default), and byCurrency says what came in per currency.
+ */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -96,7 +102,13 @@ const ITEMS =
   "JSON_TABLE(o.items, '$[*]' COLUMNS (product_id VARCHAR(100) PATH '$.productId', name VARCHAR(200) PATH '$.name', tier VARCHAR(50) PATH '$.tier', " +
   "quantity INT PATH '$.quantity', price DECIMAL(12,2) PATH '$.price', codes JSON PATH '$.codes')) i";
 
-export type SalesFilterInput = Pick<SalesFilters, "from" | "to" | "status" | "product" | "tier" | "country" | "q">;
+export type SalesFilterInput = Pick<SalesFilters, "from" | "to" | "status" | "product" | "tier" | "country" | "q"> & { currency?: string };
+
+/** The figures' currency: the one asked for (3 letters), else the shop's own. */
+function statsCurrency(asked: string | undefined): string {
+  const c = String(asked || "").toUpperCase().replace(/[^A-Z]/g, "");
+  return c.length === 3 ? c : CURRENCY;
+}
 
 /** SQL conditions on shop_orders o for the filters, and on an item i of it (ticket, tier). */
 function where(f: SalesFilterInput, agency = false) {
@@ -152,12 +164,14 @@ export type SalesStats = {
   currency: string;
   totals: SalesTotals;
   byStatus: { status: string; orders: number; amount: number }[];
+  /** paid orders per currency the buyer paid in, their own amounts (not converted) */
+  byCurrency: { currency: string; orders: number; amount: number }[];
   byDay: { day: string; revenue: number; paid: number; orders: number }[];
   byProduct: { id: string; name: string; tier: string; price: number; tickets: number; revenue: number }[];
   byTier: { tier: string; name: string; theme: string; tickets: number; revenue: number }[];
   byCountry: { country: string; orders: number; revenue: number }[];
   byTicketType: { code: string; name: string; tickets: number }[];
-  options: { products: { id: string; name: string }[]; tiers: { id: string; name: string }[]; countries: string[] };
+  options: { products: { id: string; name: string }[]; tiers: { id: string; name: string }[]; countries: string[]; currencies: string[] };
 };
 
 function emptyStats(available: boolean, tiers: { slug: string; displayName: string; cardTheme: string }[] = []): SalesStats {
@@ -166,12 +180,13 @@ function emptyStats(available: boolean, tiers: { slug: string; displayName: stri
     currency: CURRENCY,
     totals: { revenue: 0, orders: 0, paid: 0, buyers: 0, tickets: 0, average: 0 },
     byStatus: ORDER_STATUSES.map((status) => ({ status, orders: 0, amount: 0 })),
+    byCurrency: [],
     byDay: [],
     byProduct: [],
     byTier: tiers.map((t) => ({ tier: t.slug, name: t.displayName, theme: t.cardTheme, tickets: 0, revenue: 0 })),
     byCountry: [],
     byTicketType: [],
-    options: { products: [], tiers: tiers.map((t) => ({ id: t.slug, name: t.displayName })), countries: [] },
+    options: { products: [], tiers: tiers.map((t) => ({ id: t.slug, name: t.displayName })), countries: [], currencies: [CURRENCY] },
   };
 }
 
@@ -179,7 +194,10 @@ function emptyStats(available: boolean, tiers: { slug: string; displayName: stri
 export async function getSalesStats(actor: Actor, f: SalesFilterInput): Promise<SalesStats> {
   requirePermission(actor, "sales:view");
   const tiers = await db.membershipTier.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, select: { slug: true, displayName: true, cardTheme: true } });
-  const w = where(f, await hasAgencyCode());
+  const all = where(f, await hasAgencyCode());
+  // one currency's orders (amounts are never added across currencies), the shop's own by default
+  const currency = statsCurrency(f.currency);
+  const w = { ...all, sql: all.sql + " AND UPPER(o.currency) = ?", params: [...all.params, currency] };
   const paidItems = `FROM shop_orders o, ${ITEMS} ${w.sql} AND o.status = 'paid'${w.items}`;
   const paidParams = [...w.params, ...w.itemParams];
 
@@ -211,16 +229,20 @@ export async function getSalesStats(actor: Actor, f: SalesFilterInput): Promise<
       ),
       // every ticket ever ordered (its latest name and price), for the filter and the table
       query(
-        `SELECT i.product_id AS id, MAX(i.name) AS name, MAX(i.tier) AS tier, MAX(i.price) AS price
+        `SELECT i.product_id AS id, MAX(i.name) AS name, MAX(i.tier) AS tier, MAX(CASE WHEN UPPER(o.currency) = ? THEN i.price END) AS price
          FROM shop_orders o, ${ITEMS} WHERE i.product_id IS NOT NULL GROUP BY i.product_id`,
+        [currency],
       ),
       query("SELECT DISTINCT LOWER(buyer->>'$.country') AS country FROM shop_orders WHERE buyer->>'$.country' <> ''"),
+      // every currency, for the Revenue card (the filters but the currency)
+      query(`SELECT UPPER(o.currency) AS currency, COUNT(*) AS orders, COALESCE(SUM(o.amount), 0) AS amount FROM shop_orders o ${all.sql} AND o.status = 'paid' GROUP BY 1`, all.params),
+      query("SELECT DISTINCT UPPER(currency) AS currency FROM shop_orders"),
     ]);
   } catch (e) {
     if (missingTable(e)) return emptyStats(false, tiers);
     throw e;
   }
-  const [totals, tickets, days, byProduct, byTier, byStatus, countryRows, byType, products, countryList] = rows;
+  const [totals, tickets, days, byProduct, byTier, byStatus, countryRows, byType, products, countryList, currencyRows, currencyList] = rows;
 
   const perDay = new Map<string, { day: string; revenue: number; paid: number; orders: number }>();
   for (const o of days) {
@@ -257,9 +279,13 @@ export async function getSalesStats(actor: Actor, f: SalesFilterInput): Promise<
 
   return {
     available: true,
-    currency: CURRENCY,
+    currency,
     totals: { revenue, orders: num(t.orders), paid, buyers: num(t.buyers), tickets: num(tickets[0]?.tickets), average: paid ? Math.round((revenue / paid) * 100) / 100 : 0 },
     byStatus: ORDER_STATUSES.map((s) => ({ status: s, orders: statusOf.get(s)?.orders ?? 0, amount: statusOf.get(s)?.amount ?? 0 })),
+    // the shop's own currency first
+    byCurrency: currencyRows
+      .map((c) => ({ currency: String(c.currency || CURRENCY), orders: num(c.orders), amount: num(c.amount) }))
+      .sort((a, b) => (a.currency === CURRENCY ? -1 : b.currency === CURRENCY ? 1 : a.currency < b.currency ? -1 : 1)),
     byDay: [...perDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1)),
     byProduct: productList.map((p) => ({ ...p, tickets: num(productOf.get(p.id)?.tickets), revenue: num(productOf.get(p.id)?.revenue) })),
     byTier: tiers.map((x) => ({ tier: x.slug, name: x.displayName, theme: x.cardTheme, tickets: num(tierOf.get(x.slug)?.tickets), revenue: num(tierOf.get(x.slug)?.revenue) })),
@@ -271,6 +297,7 @@ export async function getSalesStats(actor: Actor, f: SalesFilterInput): Promise<
       products: productList.map((p) => ({ id: p.id, name: p.name })),
       tiers: tiers.map((x) => ({ id: x.slug, name: x.displayName })),
       countries: [...new Set(countryList.map((c) => initcap(String(c.country ?? ""))))].filter(Boolean).sort(),
+      currencies: [...new Set([CURRENCY, currency, ...currencyList.map((c) => String(c.currency ?? ""))])].filter(Boolean),
     },
   };
 }

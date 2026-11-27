@@ -115,6 +115,17 @@ function Filters({ f, stats }: { f: SalesFilters; stats: SalesStats }) {
           ))}
         </select>
       </label>
+      {/* the figures and charts are of one currency at a time: amounts are never converted */}
+      <label className={lbl}>
+        Currency
+        <select name="currency" defaultValue={stats.currency} className={field + " min-w-28"}>
+          {o.currencies.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className={lbl + " min-w-56 flex-1"}>
         Search
         <input type="search" name="q" defaultValue={f.q} placeholder="Order, name, email, phone or agency code" className={field + " w-full"} />
@@ -189,7 +200,15 @@ async function Sales({ searchParams }: { searchParams: Promise<SP> }) {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Kpi label="Revenue" value={money(t.revenue, cur)} lead>
           <Delta now={t.revenue} before={b?.revenue} />
-          <span className="mt-1 block text-xs text-pearl-dim">paid orders only</span>
+          <span className="mt-1 block text-xs text-pearl-dim">paid orders in {cur} only</span>
+          {/* buyers can pay in AED too: what came in in each currency, never converted */}
+          {stats.byCurrency.some((c) => c.currency !== cur) && (
+            <span className="mt-2 block text-xs text-pearl-dim">
+              {stats.byCurrency.map((c) => (
+                <span key={c.currency} className="block tabular-nums">{money(c.amount, c.currency) + " · " + count(c.orders) + (c.orders === 1 ? " order" : " orders")}</span>
+              ))}
+            </span>
+          )}
         </Kpi>
         <Kpi label="Paid orders" value={count(t.paid)}>
           <Delta now={t.paid} before={b?.paid} />

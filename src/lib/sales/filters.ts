@@ -28,6 +28,8 @@ export type SalesFilters = {
   product: string;
   tier: string;
   country: string;
+  /** the figures' currency (ISO code, orders paid in it only), "" for the shop's own */
+  currency: string;
   q: string;
   page: number;
 };
@@ -83,6 +85,7 @@ export function readSalesFilters(params: SP, now = new Date()): SalesFilters {
     product: one(params.product, 100),
     tier: one(params.tier, 50),
     country: one(params.country, 60),
+    currency: one(params.currency, 3).toUpperCase().replace(/[^A-Z]/g, ""),
     q: one(params.q),
     page: page > 0 ? page : 1,
   };
@@ -104,7 +107,7 @@ export function salesQuery(f: SalesFilters, changes: Partial<SalesFilters> = {})
     if (g.from) p.set("from", g.from);
     if (g.to) p.set("to", g.to);
   }
-  (["status", "product", "tier", "country", "q"] as const).forEach((k) => {
+  (["status", "product", "tier", "country", "currency", "q"] as const).forEach((k) => {
     if (g[k]) p.set(k, g[k]);
   });
   if (g.page > 1) p.set("page", String(g.page));
@@ -113,5 +116,5 @@ export function salesQuery(f: SalesFilters, changes: Partial<SalesFilters> = {})
 }
 
 export function isFiltered(f: SalesFilters): boolean {
-  return f.range !== "all" || !!(f.status || f.product || f.tier || f.country || f.q);
+  return f.range !== "all" || !!(f.status || f.product || f.tier || f.country || f.currency || f.q);
 }
