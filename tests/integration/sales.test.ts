@@ -31,12 +31,12 @@ const PRE_REGISTRATIONS = `CREATE TABLE IF NOT EXISTS pre_registrations (
 const RUBY_3 = { productId: "ruby-red/3-days", name: "Ruby Red, 3 days", price: 8000, tier: "ruby-red", codes: ["FRI", "SAT", "SUN", "AFTER"] };
 const PEARL_FS = { productId: "pearly-white/fri-sat", name: "Pearly White, Friday & Saturday", price: 5000, tier: "pearly-white", codes: ["FRI", "SAT"] };
 
-async function addOrder(o: { ref: string; status: string; at: string; email: string; country: string; items: (typeof RUBY_3 & { quantity: number })[]; memberId?: string; tickets?: string[]; payId?: string; error?: string }) {
+async function addOrder(o: { ref: string; status: string; at: string; email: string; country: string; items: (typeof RUBY_3 & { quantity: number })[]; memberId?: string; tickets?: string[]; payId?: string; error?: string; currency?: string }) {
   const amount = o.items.reduce((s, i) => s + i.price * i.quantity, 0);
   const buyer = { firstName: "Test", lastName: o.ref, email: o.email, mobile: "+971 50 000 " + o.ref.slice(-4), country: o.country, address: "Street 1", zipcode: "00000", city: "Dubai" };
   await db.$executeRawUnsafe(
-    "INSERT INTO shop_orders (ref, status, event_id, email, buyer, items, amount, currency, member_id, tickets, pay_id, pay_status, error, created_at, paid_at) VALUES (?, ?, 'cj300', ?, ?, ?, ?, 'AED', ?, ?, ?, ?, ?, ?, ?)",
-    o.ref, o.status, o.email, JSON.stringify(buyer), JSON.stringify(o.items), amount, o.memberId ?? null, o.tickets ? JSON.stringify(o.tickets) : null,
+    "INSERT INTO shop_orders (ref, status, event_id, email, buyer, items, amount, currency, member_id, tickets, pay_id, pay_status, error, created_at, paid_at) VALUES (?, ?, 'cj300', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    o.ref, o.status, o.email, JSON.stringify(buyer), JSON.stringify(o.items), amount, o.currency ?? "AED", o.memberId ?? null, o.tickets ? JSON.stringify(o.tickets) : null,
     o.payId ?? null, o.payId ? (o.status === "paid" ? "PAID" : "DECLINED") : null, o.error ?? null, o.at, o.status === "paid" ? o.at : null,
   );
 }
@@ -201,6 +201,42 @@ describe("sales on the website's orders", () => {
       () => exportSalesOrders(concierge, NO_FILTER),
     ]) {
       await expect(call()).rejects.toBeInstanceOf(AppError);
+    }
+  });
+});
+
+describe("sales in two currencies (the website's USD or AED)", () => {
+  it("keeps each currency apart: one at a time with the Currency filter, never converted", async () => {
+    await addOrder({ ref: "CJ-T-0101", status: "paid", at: "2026-11-11 08:00:00", email: "usd@sales.test", country: "Pakistan", items: [{ ...RUBY_3, price: 2178, quantity: 1 }], currency: "USD" });
+    await addOrder({ ref: "CJ-T-0102", status: "pending", at: "2026-11-11 09:00:00", email: "usd@sales.test", country: "Pakistan", items: [{ ...RUBY_3, price: 2178, quantity: 2 }], currency: "USD" });
+    try {
+      // the shop's own currency (AED here) by default: the dollar orders aren't in its figures
+      const aed = await getSalesStats(admin, NO_FILTER);
+      expect(aed.currency).toBe("AED");
+      expect(aed.totals).toMatchObject({ revenue: 29000, paid: 2, tickets: 4 });
+      expect(aed.byProduct.find((p) => p.id === "ruby-red/3-days")).toMatchObject({ price: 8000, tickets: 3, revenue: 24000 });
+      // what came in in each currency, as paid
+      expect(aed.byCurrency).toEqual([
+        { currency: "AED", orders: 2, amount: 29000 },
+        { currency: "USD", orders: 1, amount: 2178 },
+      ]);
+      expect(aed.options.currencies).toEqual(["AED", "USD"]);
+
+      const usd = await getSalesStats(admin, { ...NO_FILTER, currency: "usd" });
+      expect(usd.currency).toBe("USD");
+      expect(usd.totals).toEqual({ revenue: 2178, orders: 2, paid: 1, buyers: 1, tickets: 1, average: 2178 });
+      expect(usd.byStatus.find((x) => x.status === "pending")).toEqual({ status: "pending", orders: 1, amount: 4356 });
+      expect(usd.byProduct.find((p) => p.id === "ruby-red/3-days")).toMatchObject({ price: 2178, tickets: 1, revenue: 2178 });
+      expect(usd.byCountry).toEqual([{ country: "Pakistan", orders: 1, revenue: 2178 }]);
+      expect(usd.byDay).toEqual([{ day: "2026-11-11", revenue: 2178, paid: 1, orders: 2 }]);
+      expect(usd.byCurrency).toEqual(aed.byCurrency);
+
+      // the orders list isn't filtered by currency: each order in its own
+      const list = await listSalesOrders(admin, { ...NO_FILTER, currency: "USD" });
+      expect(list.orders.find((o) => o.ref === "CJ-T-0101")).toMatchObject({ amount: 2178, currency: "USD" });
+      expect(list.orders.find((o) => o.ref === "CJ-T-0001")).toMatchObject({ amount: 16000, currency: "AED" });
+    } finally {
+      await db.$executeRawUnsafe("DELETE FROM shop_orders WHERE ref IN ('CJ-T-0101', 'CJ-T-0102')");
     }
   });
 });
